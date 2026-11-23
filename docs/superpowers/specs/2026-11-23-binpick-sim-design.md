@@ -12,7 +12,7 @@ Roles: the builder (Claude) writes all code, scenes, tests, benchmark and report
 ## 2. Goals, non-goals, anti-goals
 
 Goals (v1):
-- Franka Panda (MuJoCo Menagerie) + custom 44 mm suction cup. (Originally a MuJoCo adhesion actuator; replaced in M2 by a seal-gated weld with a load check, see §7. Pending owner sign-off.)
+- Franka Panda (MuJoCo Menagerie) + custom 44 mm suction cup. (Originally a MuJoCo adhesion actuator; replaced in M2 by a seal-gated weld with a load check, see §7. Owner approved 2026-11-24.)
 - Bin of 20 randomly dropped parts per seed: 15 boxes, 5 cylinders.
 - Output tray with a 5 × 4 grid (20 slots).
 - One fixed top-down RGB-D camera over the bin with sensor noise, used for picking. Plus one fixed top-down camera over the tray, used only for the verify step (owner-decided addition; see §7).
