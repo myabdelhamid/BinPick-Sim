@@ -29,3 +29,13 @@ def cfg():
     from binpick.config import load_config
 
     return load_config()
+
+
+@pytest.fixture(scope="module")
+def scene(cfg):
+    import numpy as np
+
+    from binpick.sim.parts import sample_parts
+    from binpick.sim.scene import build_scene
+
+    return build_scene(cfg, sample_parts(cfg.parts, np.random.default_rng([1000, 0])))
