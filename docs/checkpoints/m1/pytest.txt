@@ -1,0 +1,41 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.15, pytest-9.2.0, pluggy-1.7.0 -- .venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/marwannelsayed/Desktop/M/Projects/BinPick-Sim
+configfile: pyproject.toml
+testpaths: tests
+plugins: platformdirs-4.14.8
+collecting ... collected 30 items
+
+tests/test_camera.py::test_render_shapes PASSED                          [  3%]
+tests/test_camera.py::test_empty_bin_floor_depth PASSED                  [  6%]
+tests/test_camera.py::test_bin_fills_frame_and_arm_not_visible PASSED    [ 10%]
+tests/test_camera.py::test_intrinsics PASSED                             [ 13%]
+tests/test_cli.py::test_cli_writes_outputs_and_is_repeatable PASSED      [ 16%]
+tests/test_config.py::test_default_config_counts PASSED                  [ 20%]
+tests/test_config.py::test_invalid_config_raises[patch0-box_height] PASSED [ 23%]
+tests/test_config.py::test_invalid_config_raises[patch1-mass_min] PASSED [ 26%]
+tests/test_config.py::test_invalid_config_raises[patch2-materials] PASSED [ 30%]
+tests/test_parts.py::test_counts_and_ranges PASSED                       [ 33%]
+tests/test_parts.py::test_deterministic[0] PASSED                        [ 36%]
+tests/test_parts.py::test_deterministic[1] PASSED                        [ 40%]
+tests/test_parts.py::test_deterministic[2147483647] PASSED               [ 43%]
+tests/test_parts.py::test_seeds_differ PASSED                            [ 46%]
+tests/test_parts.py::test_material_mix_over_many_seeds PASSED            [ 50%]
+tests/test_reach.py::test_all_targets_reachable PASSED                   [ 53%]
+tests/test_reach.py::test_ik_does_not_touch_scene_data PASSED            [ 56%]
+tests/test_reach.py::test_solution_puts_cup_on_target PASSED             [ 60%]
+tests/test_reach.py::test_reach_poses_are_collision_free PASSED          [ 63%]
+tests/test_scene.py::test_cup_is_44mm PASSED                             [ 66%]
+tests/test_scene.py::test_suction_actuator PASSED                        [ 70%]
+tests/test_scene.py::test_tray_slots PASSED                              [ 73%]
+tests/test_scene.py::test_twenty_part_bodies PASSED                      [ 76%]
+tests/test_scene.py::test_zero_parts_supported PASSED                    [ 80%]
+tests/test_scene.py::test_shaker_moves_and_returns PASSED                [ 83%]
+tests/test_settle.py::test_all_parts_settle_inside_bin PASSED            [ 86%]
+tests/test_settle.py::test_scene_at_rest PASSED                          [ 90%]
+tests/test_settle.py::test_no_deep_penetration PASSED                    [ 93%]
+tests/test_settle.py::test_same_seed_same_poses PASSED                   [ 96%]
+tests/test_settle.py::test_escape_raises PASSED                          [100%]
+
+============================= 30 passed in 23.13s ==============================
