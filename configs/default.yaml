@@ -1,0 +1,62 @@
+# BinPick-Sim settings. SI units throughout (m, kg, s).
+seed: 1000                      # dev seed; benchmark seeds 1-25 are reserved for benchmark runs
+
+parts:
+  n_boxes: 15
+  n_cylinders: 5
+  box_footprint: [0.045, 0.110]  # each footprint side
+  box_height: [0.020, 0.070]
+  cyl_diameter: [0.040, 0.080]
+  cyl_length: [0.040, 0.110]
+  mass_min: 0.05
+  mass_max: 2.5
+  materials:
+    plastic:   {prob: 0.6, density: 1200, friction: 0.6, rgba: [0.20, 0.45, 0.85, 1.0]}
+    aluminium: {prob: 0.3, density: 2700, friction: 0.5, rgba: [0.75, 0.76, 0.78, 1.0]}
+    steel:     {prob: 0.1, density: 7850, friction: 0.5, rgba: [0.35, 0.35, 0.38, 1.0]}
+
+cup:
+  diameter: 0.044
+  length: 0.020
+  rated_hold_kg: 3.0
+  tool_length: 0.050             # flange to cup base
+
+bin:
+  inner: [0.400, 0.300, 0.200]
+  wall: 0.010
+
+tray:
+  rows: 4
+  cols: 5
+  slot: 0.120
+  wall_height: 0.008             # low slot dividers
+
+cameras:
+  width: 640
+  height: 480
+  bin_fovy: 45.0
+  bin_height_above_rim: 0.55
+  tray_fovy: 60.0
+  tray_height: 0.75              # above tray surface
+
+shaker:
+  amplitude: 0.015
+  freq_hz: 3.0
+  duration_s: 1.5
+
+settle:
+  lin_tol: 0.001
+  ang_tol: 0.01
+  drop_timeout_s: 3.0
+  max_redrops: 5
+  drop_height_above_rim: 0.05
+  inset: 0.06
+
+layout:
+  robot_base_pos: [0.0, 0.0, 0.0]
+  bin_center_xy: [0.55, 0.0]
+  tray_center_xy: [0.0, 0.55]
+  table_height: 0.0              # bin outer bottom / tray base z
+
+sim:
+  timestep: 0.002
