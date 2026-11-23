@@ -22,8 +22,8 @@ class PartPose:
 
 
 class SettleError(RuntimeError):
-    def __init__(self, part_id: int, tries: int):
-        super().__init__(f"part {part_id} escaped the bin on {tries} drops")
+    def __init__(self, part_id: int, reason: str):
+        super().__init__(f"part {part_id}: {reason}")
         self.part_id = part_id
 
 
@@ -87,13 +87,26 @@ def settle_parts(scene: Scene, rng: np.random.Generator) -> list[PartPose]:
                 break
             _park(scene, i)
         else:
-            raise SettleError(part.id, s.max_redrops + 1)
+            raise SettleError(part.id, f"escaped the bin on {s.max_redrops + 1} drops")
     _run_until_settled(scene, _part_dofs(scene, placed))  # final pass over the whole pile
     mujoco.mj_forward(scene.model, scene.data)
+    validate_settled(scene)
     return [
         PartPose(p.id, scene.data.qpos[a:a + 3].copy(), scene.data.qpos[a + 3:a + 7].copy())
         for p, a in zip(scene.parts, scene.part_qpos_adr)
     ]
+
+
+def validate_settled(scene: Scene) -> None:
+    """Raise SettleError unless every part is inside the bin and at rest."""
+    s = scene.cfg.settle
+    for i, part in enumerate(scene.parts):
+        if not _inside(scene, i):
+            raise SettleError(part.id, "ended outside the bin (knocked out by a later drop)")
+        d = _part_dofs(scene, [i])[0]
+        v = scene.data.qvel
+        if np.linalg.norm(v[d:d + 3]) >= s.lin_tol or np.linalg.norm(v[d + 3:d + 6]) >= s.ang_tol:
+            raise SettleError(part.id, "still moving after the final settle pass")
 
 
 def max_penetration(scene: Scene) -> float:

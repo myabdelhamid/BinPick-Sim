@@ -11,6 +11,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: System libs for headless rendering
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libosmesa6 libgl1
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libegl-mesa0 libgl1-mesa-dri libosmesa6 libgl1
       - run: uv sync --frozen
       - run: uv run pytest -q

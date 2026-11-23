@@ -41,3 +41,29 @@ def test_escape_raises(cfg):
     with pytest.raises(SettleError) as e:
         make_settled_scene(bad, 1002)
     assert isinstance(e.value.part_id, int)
+
+
+def test_validate_rejects_part_knocked_out(cfg):
+    from binpick.sim.settle import validate_settled
+
+    scene, _ = make_settled_scene(cfg, 1003)
+    validate_settled(scene)  # a good pile passes
+    a = scene.part_qpos_adr[3]
+    scene.data.qpos[a:a + 3] = [0.0, -0.8, 0.05]  # on the floor, outside the bin
+    with pytest.raises(SettleError) as e:
+        validate_settled(scene)
+    assert e.value.part_id == 3
+
+
+def test_validate_rejects_moving_pile(cfg):
+    import mujoco
+
+    from binpick.sim.settle import validate_settled
+
+    scene, _ = make_settled_scene(cfg, 1004)
+    m = scene.model
+    dof = m.jnt_dofadr[m.body_jntadr[scene.part_body_ids[5]]]
+    scene.data.qvel[dof] = 0.5
+    with pytest.raises(SettleError) as e:
+        validate_settled(scene)
+    assert e.value.part_id == 5
