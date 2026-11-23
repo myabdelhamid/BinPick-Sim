@@ -34,9 +34,9 @@ tray:
 cameras:
   width: 640
   height: 480
-  bin_fovy: 45.0
+  bin_fovy: 36.0                 # bin rim fills ~90% of the frame width
   bin_height_above_rim: 0.55
-  tray_fovy: 60.0
+  tray_fovy: 38.0                # tray fills ~90% of the frame width
   tray_height: 0.75              # above tray surface
 
 shaker:

@@ -145,7 +145,7 @@ def _add_cameras_and_lights(spec: mujoco.MjSpec, cfg: Config) -> None:
     spec.worldbody.add_camera(name="bin_cam", pos=[bx, by, rim + cams.bin_height_above_rim], fovy=cams.bin_fovy)
     tx, ty = cfg.layout.tray_center_xy
     spec.worldbody.add_camera(name="tray_cam", pos=[tx, ty, z0 + TRAY_BASE + cams.tray_height], fovy=cams.tray_fovy)
-    eye, target = [1.9, -1.3, 1.5], [0.25, 0.25, 0.1]
+    eye, target = [1.45, -0.95, 1.15], [0.2, 0.15, 0.15]
     spec.worldbody.add_camera(name="overview_cam", pos=eye, xyaxes=_look_at_xyaxes(eye, target), fovy=50)
     spec.worldbody.add_light(name="key", pos=[0.5, -0.5, 2.5], dir=[-0.2, 0.2, -1], type=mujoco.mjtLightType.mjLIGHT_DIRECTIONAL,
                              diffuse=[0.6, 0.6, 0.6], castshadow=True)
