@@ -19,6 +19,7 @@ class IKResult:
     pos_err: float       # m
     rot_err: float       # rad
     ok: bool
+    yaw: float = 0.0     # yaw actually used (may be requested yaw + pi)
 
 
 DOWN = np.array([0.0, 0.0, -1.0])
@@ -91,4 +92,4 @@ def _solve(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarray, yaw: 
     err = task.compute_error(cfg)
     pos_err, rot_err = float(np.linalg.norm(err[:3])), float(np.linalg.norm(err[3:]))
     return IKResult(q=cfg.q[arm_adr].copy(), pos_err=pos_err, rot_err=rot_err,
-                    ok=pos_err < pos_tol and rot_err < rot_tol)
+                    ok=pos_err < pos_tol and rot_err < rot_tol, yaw=yaw)

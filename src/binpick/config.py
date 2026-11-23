@@ -155,6 +155,54 @@ class SimConfig:
 
 
 @dataclass(frozen=True)
+class MotionConfig:
+    max_joint_vel: float
+    max_joint_acc: float
+    max_cart_vel: float
+    max_cart_acc: float
+    cart_step: float
+    pregrasp_dist: float
+    approach_overtravel: float
+    lift_dist: float
+    clear_above_rim: float
+    place_clearance: float
+    retreat_dist: float
+    settle_after_move_s: float
+
+    def __post_init__(self):
+        _positive(self, "max_joint_vel", "max_joint_acc", "max_cart_vel", "max_cart_acc", "cart_step",
+                  "pregrasp_dist", "lift_dist", "retreat_dist")
+
+
+@dataclass(frozen=True)
+class TimingConfig:
+    capture_s: float
+    plan_s: float
+    vacuum_build_s: float
+    release_s: float
+    verify_s: float
+
+
+@dataclass(frozen=True)
+class SuctionConfig:
+    lip_points: int
+    gap_ok: float
+    gap_max: float
+    contact_dist: float
+    margin: float
+    vacuum_kpa: float
+    sealed_threshold_kpa: float
+    sensor_noise_kpa: float
+
+    def __post_init__(self):
+        _positive(self, "lip_points", "gap_max", "contact_dist", "vacuum_kpa", "sealed_threshold_kpa")
+        if not 0 <= self.gap_ok < self.gap_max:
+            raise ValueError(f"gap_ok: need 0 <= gap_ok < gap_max, got {self.gap_ok}, {self.gap_max}")
+        if self.sealed_threshold_kpa >= self.vacuum_kpa:
+            raise ValueError("sealed_threshold_kpa: must be below vacuum_kpa")
+
+
+@dataclass(frozen=True)
 class Config:
     seed: int
     parts: PartsConfig
@@ -166,6 +214,9 @@ class Config:
     settle: SettleConfig
     layout: LayoutConfig
     sim: SimConfig
+    motion: MotionConfig
+    timing: TimingConfig
+    suction: SuctionConfig
 
 
 def load_config(path: str | Path | None = None) -> Config:
@@ -187,4 +238,7 @@ def load_config(path: str | Path | None = None) -> Config:
         settle=SettleConfig(**raw["settle"]),
         layout=LayoutConfig(**raw["layout"]),
         sim=SimConfig(**raw["sim"]),
+        motion=MotionConfig(**raw["motion"]),
+        timing=TimingConfig(**raw["timing"]),
+        suction=SuctionConfig(**raw["suction"]),
     )

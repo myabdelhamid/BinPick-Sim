@@ -79,6 +79,8 @@ def _add_panda(spec: mujoco.MjSpec, cfg: Config) -> None:
     arm = mujoco.MjSpec.from_file(str(PANDA_XML))
     for k in list(arm.keys):
         arm.delete(k)
+    for b in arm.bodies:  # the real Panda controller compensates the arm's own gravity
+        b.gravcomp = 1.0
     flange = arm.body("attachment")
     tool = flange.add_body(name="suction_tool")
     tl, cl, r = cfg.cup.tool_length, cfg.cup.length, cfg.cup.diameter / 2

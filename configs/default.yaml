@@ -63,3 +63,34 @@ sim:
   noslip_iterations: 5         # removes perpetual contact jitter of wedged parts (cylinders)
   part_solref_timeconst: 0.01  # stiffer part contacts: ~1 mm penetration under a 20-part pile
   part_condim: 6               # torsional + rolling friction so wedged cylinders stop rocking
+
+motion:
+  max_joint_vel: 1.5             # rad/s
+  max_joint_acc: 4.0             # rad/s^2
+  max_cart_vel: 0.4              # m/s, straight-line cup moves
+  max_cart_acc: 1.5              # m/s^2; 2.5 kg * (g + 1.5) = 28.3 N < 29.4 N rated hold
+  cart_step: 0.01                # IK waypoint spacing on straight lines
+  pregrasp_dist: 0.12            # stand-off along the face normal before approach
+  approach_overtravel: 0.002     # go this far past the surface (cup margin absorbs it)
+  lift_dist: 0.06                # first lift along the face normal
+  clear_above_rim: 0.05          # transport height margin above rim + part height
+  place_clearance: 0.005         # part's lowest point above tray surface at release
+  retreat_dist: 0.10
+  settle_after_move_s: 0.1       # hold at the end of each move
+
+timing:                          # sim-time costs of non-motion phases (real cells pay these too)
+  capture_s: 0.3
+  plan_s: 0.2
+  vacuum_build_s: 0.15
+  release_s: 0.25
+  verify_s: 0.2
+
+suction:
+  lip_points: 16
+  gap_ok: 0.003                  # lip height spread fully sealed by the bellows
+  gap_max: 0.008                 # spread at which the seal is lost (bellows compliance)
+  contact_dist: 0.006            # lip must be within this of the surface
+  margin: 0.004                  # cup geom margin = gap: adhesion sees the surface without pushing
+  vacuum_kpa: 60.0
+  sealed_threshold_kpa: 40.0
+  sensor_noise_kpa: 1.0
