@@ -11,10 +11,12 @@ dependencies = [
     "pyyaml>=6",
     "pillow>=10",
     "imageio>=2.34",
+    "imageio-ffmpeg>=0.8.1",
 ]
 
 [project.scripts]
 binpick-scene = "binpick.cli:scene_main"
+binpick-demo = "binpick.cli:demo_main"
 
 [dependency-groups]
 dev = ["pytest>=8"]

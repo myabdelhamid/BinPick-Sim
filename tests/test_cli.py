@@ -17,3 +17,15 @@ def test_cli_writes_outputs_and_is_repeatable(tmp_path):
     j = json.loads(texts[0])
     assert j["seed"] == 1000 and len(j["parts"]) == 20
     assert {"id", "shape", "material", "dims", "mass", "pos", "quat"} <= j["parts"][0].keys()
+
+
+def test_demo_writes_csv_and_video(tmp_path):
+    import csv
+
+    from binpick.cli import demo_main
+
+    assert demo_main(["--seed", "1000", "--picks", "1", "--video", "--out", str(tmp_path)]) == 0
+    out = tmp_path / "demo_seed1000"
+    rows = list(csv.DictReader(open(out / "attempts.csv")))
+    assert len(rows) == 1 and rows[0]["outcome"] in ("success", "fail")
+    assert (out / "demo.mp4").stat().st_size > 10_000

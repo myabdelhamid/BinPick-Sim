@@ -60,3 +60,84 @@ def scene_main(argv: list[str] | None = None) -> int:
     (out / "parts.json").write_text(json.dumps(meta, indent=2))
     print(f"wrote {out}")
     return 0
+
+
+class _VideoRecorder:
+    """Overview-camera frames at a fixed sim-time rate, with a status line burned in."""
+
+    def __init__(self, scene, path: Path, fps: int = 30, size: tuple[int, int] = (960, 720)):
+        import imageio.v2 as imageio
+        import mujoco
+
+        self.scene, self.fps, self.next_t = scene, fps, scene.data.time
+        self.renderer = mujoco.Renderer(scene.model, height=size[1], width=size[0])
+        self.writer = imageio.get_writer(path, fps=fps, codec="libx264", quality=7, macro_block_size=8)
+        self.status = ""
+
+    def __call__(self, scene, phase: str, pressure_kpa: float) -> None:
+        if scene.data.time + 1e-9 < self.next_t:
+            return
+        self.next_t += 1.0 / self.fps
+        from PIL import Image, ImageDraw
+
+        self.renderer.update_scene(scene.data, camera="overview_cam")
+        img = Image.fromarray(self.renderer.render())
+        ImageDraw.Draw(img).text(
+            (12, 10), f"t={scene.data.time:6.2f}s  {self.status}  phase={phase:<9}  vacuum={pressure_kpa:6.1f} kPa",
+            fill=(20, 20, 20))
+        self.writer.append_data(np.asarray(img))
+
+    def close(self) -> None:
+        self.writer.close()
+        self.renderer.close()
+
+
+def demo_main(argv: list[str] | None = None) -> int:
+    """M2 demo: pick parts from their known poses, place them in the tray, log and optionally film it."""
+    from binpick.planning.oracle import oracle_targets
+    from binpick.supervisor.machine import Supervisor
+    from binpick.supervisor.records import write_csv
+
+    ap = argparse.ArgumentParser(prog="binpick-demo", description="Known-pose pick-and-place demo.")
+    ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--picks", type=int, default=3, help="number of attempts")
+    ap.add_argument("--video", action="store_true", help="write demo.mp4 from the overview camera")
+    ap.add_argument("--config", default=None)
+    ap.add_argument("--out", default="outputs")
+    args = ap.parse_args(argv)
+
+    cfg = load_config(args.config)
+    seed = cfg.seed if args.seed is None else args.seed
+    scene, _ = make_settled_scene(cfg, seed)
+    out = Path(args.out) / f"demo_seed{seed}"
+    out.mkdir(parents=True, exist_ok=True)
+
+    rec = _VideoRecorder(scene, out / "demo.mp4") if args.video else None
+    sup = Supervisor(scene, np.random.default_rng([seed, 2]), seed=seed,
+                     observer=(lambda s, ph: rec(s, ph, sup.cup.pressure_kpa())) if rec else None)
+    try:
+        while len(sup.records) < args.picks:
+            targets = oracle_targets(scene)
+            if not targets:
+                sup.events.append({"seed": seed, "time": scene.data.time, "event": "no_candidate"})
+                break
+            for t in targets:
+                if rec:
+                    rec.status = f"attempt {len(sup.records) + 1}: part {scene.parts[t.part_index].id}"
+                if sup.attempt(t) is not None:
+                    break
+            else:
+                sup.events.append({"seed": seed, "time": scene.data.time, "event": "no_reachable_candidate"})
+                break
+    finally:
+        if rec:
+            rec.close()
+
+    write_csv(sup.records, out / "attempts.csv")
+    (out / "events.json").write_text(json.dumps(sup.events, indent=2, default=float))
+    for r in sup.records:
+        print(f"attempt {r.attempt}: part {scene.parts[r.target_part].id} -> {r.outcome}"
+              f"{'' if r.outcome == 'success' else ' (' + r.reason + ')'}  slot={r.slot}  cycle={r.cycle_time_s:.2f}s")
+    ok = sum(r.outcome == "success" for r in sup.records)
+    print(f"{ok}/{len(sup.records)} successful; wrote {out}")
+    return 0
