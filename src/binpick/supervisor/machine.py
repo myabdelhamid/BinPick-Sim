@@ -12,7 +12,7 @@ from collections.abc import Callable
 import mujoco
 import numpy as np
 
-from binpick.motion.ik import DOWN, solve_cup_pose
+from binpick.motion.ik import DOWN, solve_cup_pose, yaw_of
 from binpick.motion.trajectory import IKError, JointTrajectory, cartesian_line, execute, joint_move
 from binpick.planning.oracle import GraspTarget
 from binpick.sim.scene import PARK_X0, Scene
@@ -143,6 +143,8 @@ class Supervisor:
             self._grip(phase, rec)
             self._lift_transport_place(phase, rec, target, n)
             phase("release", lambda: (self.cup.off(), self._wait(cfg.timing.release_s)))
+            rec.slot, self._pending_slot = self._pending_slot, None
+            self.slots.commit()
             p, _ = self._cup_pose()
             phase("retreat", lambda: (self._run(self._line(p, p + [0, 0, cfg.motion.retreat_dist], DOWN,
                                                              self._place_yaw, loaded=False)),
@@ -154,11 +156,13 @@ class Supervisor:
 
             phase("verify", verify)
         except _Abort as a:
-            rec.reason = a.reason
+            rec.reason = rec.sensed = a.reason
             self._recover(phase)
+            self._slot_after_failure(rec)
         except IKError:
-            rec.reason = "ik_fail"
+            rec.reason = rec.sensed = "ik_fail"
             self._recover(phase)
+            self._slot_after_failure(rec)
 
         self._score(rec)
         rec.cycle_time_s = d.time - t0
@@ -186,21 +190,19 @@ class Supervisor:
 
         def lift():
             self._watch_seal, self._low_polls = True, 0
-            if n[2] > 0.995:  # near-vertical grasp: one straight lift to transport height
-                p1 = np.r_[p_grip[:2], max(clear_z, p_grip[2] + cfg.motion.lift_dist)]
-            else:
-                p1 = p_grip + n * cfg.motion.lift_dist
+            # Straight up, whatever the face tilt: lifting along a tilted normal drags parts that lean on
+            # a wall (or a neighbour) into it. Cup orientation is kept.
+            p1 = np.r_[p_grip[:2], max(clear_z, p_grip[2] + cfg.motion.lift_dist)]
             ok = self._run(self._line(p_grip, p1, -n, self._grasp_yaw()))
-            if ok and p1[2] < clear_z:
-                ok = self._run(self._line(p1, np.r_[p1[:2], clear_z], -n, self._grasp_yaw()))
             if not ok:
                 raise _Abort("seal_lost_lift")
 
         phase("lift", lift)
-        rec.slot = self.slots.next()
-        if rec.slot is None:
-            raise _Abort("ik_fail")
-        slot_c = scene.slot_centers[rec.slot]
+        slot = self.slots.peek()
+        if slot is None:
+            raise _Abort("tray_full")
+        self._pending_slot = slot  # used up only on release (or if a failed part ends up lying in it)
+        slot_c = scene.slot_centers[slot]
         self._place_yaw = place_yaw(long_cup)
         release_p = slot_c + [0, 0, cfg.motion.place_clearance + target.depth]
         pre_place = np.r_[slot_c[:2], max(clear_z, release_p[2] + cfg.motion.pregrasp_dist)]
@@ -222,6 +224,15 @@ class Supervisor:
 
         phase("place", place)
 
+    def _slot_after_failure(self, rec: AttemptRecord) -> None:
+        """A failed part seen lying in the pending slot (tray camera) uses that slot up."""
+        slot, self._pending_slot = self._pending_slot, None
+        if slot is not None and verify_slot(self.scene, slot)[1] is not None:
+            rec.slot = slot
+            self.slots.commit()
+
+    _pending_slot: int | None = None
+
     def _to_ready(self) -> None:
         r = self._ik_min_motion(self.ready_pos, DOWN)
         if not r.ok:
@@ -229,8 +240,7 @@ class Supervisor:
         self._run(joint_move(self._q(), r.q, self.scene.cfg.motion))
 
     def _grasp_yaw(self) -> float:
-        _, R = self._cup_pose()
-        return float(np.arctan2(R[1, 0], R[0, 0])) if abs(R[2, 2]) > 0.99 else 0.0
+        return yaw_of(self._cup_pose()[1])
 
     _place_yaw = 0.0
 
@@ -244,7 +254,7 @@ class Supervisor:
             p, R = self._cup_pose()
             up = np.r_[p[:2], max(p[2] + cfg.motion.retreat_dist, self._rim() + HOVER_ABOVE_RIM)]
             try:
-                self._run(self._line(p, up, R[:, 2], 0.0, loaded=False))
+                self._run(self._line(p, up, R[:, 2], yaw_of(R), loaded=False))
             except IKError:
                 self._wait(0.2)
 
@@ -263,6 +273,8 @@ class Supervisor:
             rec.outcome = "fail"
             if not rec.reason:
                 rec.reason = "misplaced"
+            elif rec.reason.startswith("seal_lost") and self.cup.break_cause == "external_contact":
+                rec.reason = "collision"  # root cause: torn off by contact with the bin or another part
                 rec.detected = not rec.verify_ok
         lo, hi = scene.bin_inner_bounds()
         for i, b in enumerate(scene.part_body_ids):

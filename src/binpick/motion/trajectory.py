@@ -97,7 +97,7 @@ def cartesian_line(scene: Scene, q0: np.ndarray, p0: np.ndarray, p1: np.ndarray,
         r = solve_cup_pose(scene, p0 + u * (p1 - p0), approach_dir, yaw, q0=q)
         if not r.ok:
             raise IKError(f"waypoint {i}/{k - 1} unreachable (pos_err={r.pos_err:.4f})")
-        if i and np.abs(r.q - q).max() > MAX_WAYPOINT_JUMP:
+        if np.abs(r.q - q).max() > MAX_WAYPOINT_JUMP:  # waypoint 0 is checked against q0 (no step command)
             raise IKError(f"IK branch jump at waypoint {i}")
         yaw, q = r.yaw, r.q
         qs.append(q)

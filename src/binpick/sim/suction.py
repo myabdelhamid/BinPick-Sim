@@ -26,6 +26,8 @@ import numpy as np
 from binpick.sim.scene import Scene
 
 RAY_BACKOFF = 0.03  # rays start this far behind the cup face
+EXTERNAL_CONTACT_MIN_N = 5.0  # a break with more contact force than this (and the part's weight) from
+                              # anything but the cup is a collision/snag, not a weak seal
 
 
 def _cup_frame(scene: Scene) -> tuple[np.ndarray, np.ndarray]:
@@ -35,24 +37,22 @@ def _cup_frame(scene: Scene) -> tuple[np.ndarray, np.ndarray]:
 
 def lip_distances(scene: Scene, part_index: int) -> np.ndarray:
     """Distance from each lip point (in the cup-face plane) to the part surface along the cup axis.
-    NaN where the ray misses the part."""
+    Rays are cast against the whole scene (excluding the cup): NaN where the first thing under that
+    lip point is not the part (an edge, a gap, or a neighbouring part holding the lip off)."""
     m, d = scene.model, scene.data
     tip, R = _cup_frame(scene)
     x, y, z = R[:, 0], R[:, 1], R[:, 2]
     r = scene.cfg.cup.diameter / 2
     n = scene.cfg.suction.lip_points
     body = scene.part_body_ids[part_index]
-    geoms = range(m.body_geomadr[body], m.body_geomadr[body] + m.body_geomnum[body])
+    cup_body = m.geom(scene.cup_geom).bodyid[0]
+    geomid = np.array([-1], dtype=np.int32)
     out = np.full(n, np.nan)
     for k, th in enumerate(np.linspace(0, 2 * np.pi, n, endpoint=False)):
         pnt = tip + r * (np.cos(th) * x + np.sin(th) * y) - RAY_BACKOFF * z
-        best = np.inf
-        for g in geoms:
-            dist = mujoco.mju_rayGeom(d.geom_xpos[g], d.geom_xmat[g], m.geom_size[g], pnt, z, m.geom_type[g])
-            if dist >= 0:
-                best = min(best, dist)
-        if np.isfinite(best):
-            out[k] = best - RAY_BACKOFF
+        dist = mujoco.mj_ray(m, d, pnt, z, None, 1, cup_body, geomid)
+        if dist >= 0 and geomid[0] >= 0 and m.geom_bodyid[geomid[0]] == body:
+            out[k] = dist - RAY_BACKOFF
     return out
 
 
@@ -84,11 +84,13 @@ class SuctionCup:
         self.q = 0.0
         self.part_index: int | None = None  # ground truth: part held by the cup (not for the supervisor)
         self.last_utilization = 0.0
+        self.break_cause = ""  # ground truth, for failure attribution only: "overload" | "external_contact"
         self._broken = False  # seal broke under load: no re-grip until the vacuum is cycled off/on
         self._p = 0.0  # true line pressure, kPa (negative = vacuum)
 
     def on(self) -> None:
         self.active = True
+        self.break_cause = ""
 
     def off(self) -> None:
         self.active = False
@@ -190,12 +192,30 @@ class SuctionCup:
             a = min(1.0, m.opt.timestep / self.scene.cfg.suction.break_filter_s)
             self.last_utilization += a * (self.utilization() - self.last_utilization)
             if self.last_utilization > 1.0:
+                ext = self._external_contact_n(self.part_index)
+                weight = self.scene.model.body_mass[self.scene.part_body_ids[self.part_index]] * 9.81
+                self.break_cause = "external_contact" if ext > max(EXTERNAL_CONTACT_MIN_N, weight) else "overload"
                 self._detach()
                 self._broken = True
         cfg = self.scene.cfg
         tau = max(cfg.timing.vacuum_build_s / 3, m.opt.timestep)
         target = -cfg.suction.vacuum_kpa * self.q
         self._p += (target - self._p) * min(1.0, m.opt.timestep / tau)
+
+    def _external_contact_n(self, i: int) -> float:
+        m, d = self.scene.model, self.scene.data
+        b, total, f6 = self.scene.part_body_ids[i], 0.0, np.zeros(6)
+        for k in range(d.ncon):
+            c = d.contact[k]
+            b1, b2 = m.geom_bodyid[c.geom1], m.geom_bodyid[c.geom2]
+            if b in (b1, b2) and self._cup_body not in (b1, b2):
+                mujoco.mj_contactForce(m, d, k, f6)
+                total += abs(f6[0])
+        return total
+
+    def pressure_display_kpa(self) -> float:
+        """Noise-free line pressure for videos/plots (does not consume the sensor noise stream)."""
+        return self._p
 
     def pressure_kpa(self) -> float:
         return self._p + float(self.rng.normal(0.0, self.scene.cfg.suction.sensor_noise_kpa))

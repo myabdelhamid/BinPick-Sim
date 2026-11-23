@@ -12,7 +12,7 @@ Roles: the builder (Claude) writes all code, scenes, tests, benchmark and report
 ## 2. Goals, non-goals, anti-goals
 
 Goals (v1):
-- Franka Panda (MuJoCo Menagerie) + custom 44 mm suction cup driven by a MuJoCo adhesion actuator.
+- Franka Panda (MuJoCo Menagerie) + custom 44 mm suction cup. (Originally a MuJoCo adhesion actuator; replaced in M2 by a seal-gated weld with a load check, see §7. Pending owner sign-off.)
 - Bin of 20 randomly dropped parts per seed: 15 boxes, 5 cylinders.
 - Output tray with a 5 × 4 grid (20 slots).
 - One fixed top-down RGB-D camera over the bin with sensor noise, used for picking. Plus one fixed top-down camera over the tray, used only for the verify step (owner-decided addition; see §7).
@@ -90,8 +90,9 @@ Layout: robot base, bin and tray positions are the builder's call. Hard constrai
 
 ## 7. Suction realism principle (fixed now, detailed in M2/M4)
 
-MuJoCo's adhesion actuator sticks to anything it touches, so on its own it is unrealistic. The design is:
-- The adhesion actuator only supplies the force.
+MuJoCo's adhesion actuator sticks to anything it touches, so on its own it is unrealistic. It also turned out not to be calibratable: it only pulls through active contacts, so its real hold was ~70% of nominal and collapsed nonlinearly (measured in M2). The M2 design is:
+- When the seal model gives q > 0, a weld constraint holds the part to the cup (the vacuum).
+- Every step the cup-to-part interface load (weld + lip contact forces) is measured and compared with what the seal can hold, q × 74 N (60 kPa over the cup's effective area, 2.5× the 3 kg rating): utilization = tension/F + bending/(F·r·0.5) + shear/(0.5·F), filtered over 20 ms. Above 1 the grip breaks and cannot re-seal until the vacuum is cycled.
 - A **seal model** decides how much force is available. It is computed every control step from the *ground-truth* cup-to-part geometry in sim, never from the planner's estimate.
 - Seal quality `q ∈ [0, 1]` drops with: angle between the cup axis and the surface normal, curvature or non-planarity of the surface under the cup lip, and the fraction of the cup lip that is off the face (edges, small faces).
 - Available hold force = `q × F_rated`, where `F_rated` corresponds to about 3 kg.
@@ -119,7 +120,7 @@ binpick/
     scene.py       #    MjSpec world: panda + cup, bin, tray, camera, parts
     settle.py      #    drop parts one at a time, settle, validate
     camera.py      #    render RGB + metric depth (+ noise, M4)
-    suction.py     #    adhesion control + seal model (M2/M4)
+    suction.py     #    seal model, vacuum grip with load check, vacuum sensor (M2/M4)
   perception/      # 2. depth → point cloud (M3)
   planning/        # 3. rules planner, random baseline (M3)
   motion/          # 4. mink IK + trajectories (M2)

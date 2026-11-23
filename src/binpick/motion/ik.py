@@ -93,3 +93,13 @@ def _solve(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarray, yaw: 
     pos_err, rot_err = float(np.linalg.norm(err[:3])), float(np.linalg.norm(err[3:]))
     return IKResult(q=cfg.q[arm_adr].copy(), pos_err=pos_err, rot_err=rot_err,
                     ok=pos_err < pos_tol and rot_err < rot_tol, yaw=yaw)
+
+
+def yaw_of(R: np.ndarray) -> float:
+    """Inverse of `cup_rotation` for the yaw: the horizontal vector whose projection onto the plane
+    normal to the cup axis is the cup's x axis is ref = x - (x_z / z_z) z."""
+    x, z = R[:, 0], R[:, 2]
+    if abs(z[2]) < 1e-6:
+        return 0.0
+    ref = x - (x[2] / z[2]) * z
+    return float(np.arctan2(ref[1], ref[0]))

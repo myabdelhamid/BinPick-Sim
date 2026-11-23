@@ -15,16 +15,17 @@ TOP_BAND = 0.004         # pixels within 4 mm of the highest point in the slot =
 
 
 class SlotAllocator:
-    """Hands out tray slots in order; a used slot (filled or misplaced into) is never reused."""
+    """Tray slots in order. A slot is used up (commit) only when a part was released into it or is
+    seen lying in it; a failure before that leaves it free for the next attempt."""
 
     def __init__(self, n: int):
         self.n, self._next = n, 0
 
-    def next(self) -> int | None:
-        if self._next >= self.n:
-            return None
+    def peek(self) -> int | None:
+        return self._next if self._next < self.n else None
+
+    def commit(self) -> None:
         self._next += 1
-        return self._next - 1
 
 
 def place_yaw(long_axis_cup: np.ndarray) -> float:

@@ -22,8 +22,11 @@ def _put_in_slot(cfg, slot, offset=(0.0, 0.0), yaw=0.0):
 
 def test_slot_allocator_never_reuses():
     al = SlotAllocator(3)
-    assert [al.next(), al.next(), al.next()] == [0, 1, 2]
-    assert al.next() is None
+    got = []
+    for _ in range(3):
+        got.append(al.peek())
+        al.commit()
+    assert got == [0, 1, 2] and al.peek() is None
 
 
 def test_verify_and_referee_centered(cfg):

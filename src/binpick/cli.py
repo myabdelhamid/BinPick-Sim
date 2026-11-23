@@ -114,7 +114,7 @@ def demo_main(argv: list[str] | None = None) -> int:
 
     rec = _VideoRecorder(scene, out / "demo.mp4") if args.video else None
     sup = Supervisor(scene, np.random.default_rng([seed, 2]), seed=seed,
-                     observer=(lambda s, ph: rec(s, ph, sup.cup.pressure_kpa())) if rec else None)
+                     observer=(lambda s, ph: rec(s, ph, sup.cup.pressure_display_kpa())) if rec else None)
     try:
         while len(sup.records) < args.picks:
             targets = oracle_targets(scene)
