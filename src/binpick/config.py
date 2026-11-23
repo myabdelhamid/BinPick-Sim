@@ -156,10 +156,12 @@ class SimConfig:
 
 @dataclass(frozen=True)
 class MotionConfig:
-    max_joint_vel: float
+    max_joint_vel: tuple[float, ...]
     max_joint_acc: float
+    max_joint_acc_loaded: float
     max_cart_vel: float
     max_cart_acc: float
+    max_cart_acc_empty: float
     cart_step: float
     pregrasp_dist: float
     approach_overtravel: float
@@ -170,8 +172,11 @@ class MotionConfig:
     settle_after_move_s: float
 
     def __post_init__(self):
-        _positive(self, "max_joint_vel", "max_joint_acc", "max_cart_vel", "max_cart_acc", "cart_step",
-                  "pregrasp_dist", "lift_dist", "retreat_dist")
+        object.__setattr__(self, "max_joint_vel", tuple(float(v) for v in self.max_joint_vel))
+        if len(self.max_joint_vel) != 7 or min(self.max_joint_vel) <= 0:
+            raise ValueError("max_joint_vel: need 7 positive values")
+        _positive(self, "max_joint_acc", "max_joint_acc_loaded", "max_cart_vel", "max_cart_acc",
+                  "max_cart_acc_empty", "cart_step", "pregrasp_dist", "lift_dist", "retreat_dist")
 
 
 @dataclass(frozen=True)
@@ -197,6 +202,8 @@ class SuctionConfig:
     break_filter_s: float
     vacuum_kpa: float
     sealed_threshold_kpa: float
+    lost_threshold_kpa: float
+    lost_debounce_polls: int
     sensor_noise_kpa: float
 
     def __post_init__(self):
@@ -205,6 +212,8 @@ class SuctionConfig:
             raise ValueError(f"gap_ok: need 0 <= gap_ok < gap_max, got {self.gap_ok}, {self.gap_max}")
         if self.sealed_threshold_kpa >= self.vacuum_kpa:
             raise ValueError("sealed_threshold_kpa: must be below vacuum_kpa")
+        if not 0 < self.lost_threshold_kpa <= self.sealed_threshold_kpa:
+            raise ValueError("lost_threshold_kpa: need 0 < lost_threshold_kpa <= sealed_threshold_kpa")
 
 
 @dataclass(frozen=True)

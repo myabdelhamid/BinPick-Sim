@@ -52,14 +52,14 @@ def solve_cup_pose(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarra
     Parts are placed by aligning their long side with the slot, which is symmetric under a
     180 deg turn, so yaw + pi is tried if yaw fails (keeps joint7 inside its limits).
     """
-    best = None
-    for y in (yaw, yaw + np.pi):
-        r = _solve(scene, target_pos, approach_dir, y, q0, pos_tol, rot_tol, max_iters)
-        if r.ok:
-            return r
-        if best is None or r.pos_err < best.pos_err:
-            best = r
-    return best
+    results = [_solve(scene, target_pos, approach_dir, y, q0, pos_tol, rot_tol, max_iters) for y in (yaw, yaw + np.pi)]
+    ok = [r for r in results if r.ok]
+    if not ok:
+        return min(results, key=lambda r: r.pos_err)
+    if len(ok) == 1:
+        return ok[0]
+    ref = np.array([scene.data.joint(j).qpos[0] for j in scene.arm_joint_names]) if q0 is None else q0
+    return min(ok, key=lambda r: float(np.abs(r.q - ref).max()))  # the equivalent yaw needing least motion
 
 
 def _solve(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarray, yaw: float, q0: np.ndarray | None,

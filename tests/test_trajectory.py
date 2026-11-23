@@ -23,7 +23,7 @@ def test_joint_move_limits(cfg):
     dt = np.diff(tr.t)[:, None]
     v = np.diff(tr.q, axis=0) / dt
     a = np.diff(v, axis=0) / dt[1:]
-    assert np.abs(v).max() <= cfg.motion.max_joint_vel * 1.01
+    assert np.all(np.abs(v).max(axis=0) <= np.array(cfg.motion.max_joint_vel) * 1.01)
     assert np.abs(a).max() <= cfg.motion.max_joint_acc * 1.05
 
 

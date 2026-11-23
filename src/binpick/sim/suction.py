@@ -84,6 +84,7 @@ class SuctionCup:
         self.q = 0.0
         self.part_index: int | None = None  # ground truth: part held by the cup (not for the supervisor)
         self.last_utilization = 0.0
+        self._broken = False  # seal broke under load: no re-grip until the vacuum is cycled off/on
         self._p = 0.0  # true line pressure, kPa (negative = vacuum)
 
     def on(self) -> None:
@@ -91,6 +92,7 @@ class SuctionCup:
 
     def off(self) -> None:
         self.active = False
+        self._broken = False  # a new on() may seal again
 
     @property
     def holding(self) -> bool:
@@ -130,7 +132,9 @@ class SuctionCup:
         self.part_index, self.q = None, 0.0
 
     def _weld_wrench_at_tip(self, i: int) -> tuple[np.ndarray, np.ndarray]:
-        """Force (world) and moment about the cup tip (world) that the weld applies to part i."""
+        """Net force (world) and moment about the cup tip (world) the cup applies to part i: the weld
+        (vacuum) plus the cup-to-part contact forces. Their internal preload (lip pressed onto the
+        part) cancels; what remains is the external load the seal has to carry."""
         m, d = self.scene.model, self.scene.data
         n = d.nefc
         mask = (d.efc_type[:n] == int(mujoco.mjtConstraint.mjCNSTR_EQUALITY)) & (d.efc_id[:n] == self._eq[i])
@@ -143,7 +147,20 @@ class SuctionCup:
         F = gen[:3]
         tau_com = d.xmat[b].reshape(3, 3) @ gen[3:]  # free-joint angular dofs are in the body frame
         tip, _ = _cup_frame(self.scene)
-        return F, tau_com + np.cross(d.xipos[b] - tip, F)
+        M = tau_com + np.cross(d.xipos[b] - tip, F)
+        f6 = np.zeros(6)
+        for k in range(d.ncon):
+            c = d.contact[k]
+            b1, b2 = m.geom_bodyid[c.geom1], m.geom_bodyid[c.geom2]
+            if {b1, b2} != {self._cup_body, b}:
+                continue
+            mujoco.mj_contactForce(m, d, k, f6)
+            fw = c.frame.reshape(3, 3).T @ f6[:3]  # contact frame -> world; acts on geom2 along +normal
+            if b1 == b:
+                fw = -fw
+            F = F + fw
+            M = M + np.cross(c.pos - tip, fw)
+        return F, M
 
     def utilization(self) -> float:
         if self.part_index is None or self.q <= 0:
@@ -163,17 +180,18 @@ class SuctionCup:
         m = self.scene.model
         if not self.active:
             self._detach()
-        elif self.part_index is None:
+        elif self.part_index is None and not self._broken:
             i = self._part_under_cup()
             q = seal_quality(self.scene, i) if i is not None else 0.0
             if q > 0:
                 self.q = q
                 self._attach(i)
-        else:
+        elif self.part_index is not None:
             a = min(1.0, m.opt.timestep / self.scene.cfg.suction.break_filter_s)
             self.last_utilization += a * (self.utilization() - self.last_utilization)
             if self.last_utilization > 1.0:
                 self._detach()
+                self._broken = True
         cfg = self.scene.cfg
         tau = max(cfg.timing.vacuum_build_s / 3, m.opt.timestep)
         target = -cfg.suction.vacuum_kpa * self.q
@@ -183,4 +201,9 @@ class SuctionCup:
         return self._p + float(self.rng.normal(0.0, self.scene.cfg.suction.sensor_noise_kpa))
 
     def sealed(self) -> bool:
+        """Grip confirmed (switch-on threshold)."""
         return self.pressure_kpa() < -self.scene.cfg.suction.sealed_threshold_kpa
+
+    def vacuum_present(self) -> bool:
+        """Still holding something (switch-off threshold, lower than switch-on: hysteresis)."""
+        return self.pressure_kpa() < -self.scene.cfg.suction.lost_threshold_kpa

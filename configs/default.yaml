@@ -36,8 +36,8 @@ cameras:
   height: 480
   bin_fovy: 36.0                 # bin rim fills ~90% of the frame width
   bin_height_above_rim: 0.55
-  tray_fovy: 38.0                # tray fills ~90% of the frame width
-  tray_height: 0.75              # above tray surface
+  tray_fovy: 42.0                # whole tray plus parts overhanging edge slots stay in frame
+  tray_height: 0.90              # above tray surface
 
 shaker:
   amplitude: 0.015
@@ -65,10 +65,12 @@ sim:
   part_condim: 6               # torsional + rolling friction so wedged cylinders stop rocking
 
 motion:
-  max_joint_vel: 1.5             # rad/s
-  max_joint_acc: 4.0             # rad/s^2
-  max_cart_vel: 0.4              # m/s, straight-line cup moves
-  max_cart_acc: 1.5              # m/s^2; 2.5 kg * (g + 1.5) = 28.3 N < 29.4 N rated hold
+  max_joint_vel: [2.175, 2.175, 2.175, 2.175, 2.61, 2.61, 2.61]  # rad/s, Panda datasheet limits
+  max_joint_acc: 8.0             # rad/s^2, empty cup
+  max_joint_acc_loaded: 3.0      # rad/s^2, carrying a part (keeps inertial peel/shear on the cup low)
+  max_cart_vel: 0.8              # m/s, straight-line cup moves
+  max_cart_acc: 2.5              # m/s^2, carrying a part (lines are along the cup axis: 2.5 kg * (g + 2.5) = 31 N, 42% of the 74 N seal)
+  max_cart_acc_empty: 4.0        # m/s^2, empty cup
   cart_step: 0.01                # IK waypoint spacing on straight lines
   pregrasp_dist: 0.12            # stand-off along the face normal before approach
   approach_overtravel: 0.002     # go this far past the surface (cup margin absorbs it)
@@ -76,7 +78,7 @@ motion:
   clear_above_rim: 0.05          # transport height margin above rim + part height
   place_clearance: 0.005         # part's lowest point above tray surface at release
   retreat_dist: 0.10
-  settle_after_move_s: 0.1       # hold at the end of each move
+  settle_after_move_s: 0.03      # hold at the end of each move (velocity feed-forward keeps lag small)
 
 timing:                          # sim-time costs of non-motion phases (real cells pay these too)
   capture_s: 0.3
@@ -94,8 +96,10 @@ suction:
   effective_radius_ratio: 0.9    # bellows effective suction radius / lip radius -> capacity 60 kPa * pi*(19.8 mm)^2 = 74 N
   peel_lever_ratio: 0.5          # moment capacity = F_avail * lip_radius * ratio (edge lifts before full lever)
   shear_friction: 0.5            # rubber lip friction against the part
-  bellows_timeconst: 0.02        # grip weld solref time constant: bellows compliance
+  bellows_timeconst: 0.006       # grip weld solref time constant; gravity sag ~ g*tc^2 = 0.35 mm
   break_filter_s: 0.02           # seal fails on load sustained ~20 ms (air must leak in), not on 2 ms spikes
   vacuum_kpa: 60.0
-  sealed_threshold_kpa: 40.0
+  sealed_threshold_kpa: 40.0     # grip confirmed below -40 kPa
+  lost_threshold_kpa: 20.0       # hysteresis: grip lost only above -20 kPa ...
+  lost_debounce_polls: 3         # ... on 3 consecutive 20 ms readings (one noisy sample is not a drop)
   sensor_noise_kpa: 1.0

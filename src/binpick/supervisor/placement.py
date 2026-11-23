@@ -11,6 +11,7 @@ PLACE_TOL = 0.010        # spec: part center within +-10 mm of the slot center
 VERIFY_MIN_HEIGHT = 0.003
 VERIFY_INSET = 0.008     # ignore pixels near the slot dividers (8 mm tall)
 VERIFY_MIN_PIXELS = 50
+TOP_BAND = 0.004         # pixels within 4 mm of the highest point in the slot = the part's top face
 
 
 class SlotAllocator:
@@ -46,6 +47,9 @@ def verify_slot(scene: Scene, slot: int) -> tuple[bool, np.ndarray | None]:
     c = scene.slot_centers[slot]
     half = scene.cfg.tray.slot / 2 - VERIFY_INSET
     mask = (np.abs(x - c[0]) < half) & (np.abs(y - c[1]) < half) & (z > c[2] + VERIFY_MIN_HEIGHT)
+    if mask.sum() < VERIFY_MIN_PIXELS:
+        return False, None
+    mask &= z > z[mask].max() - TOP_BAND  # top face only: side faces seen in perspective bias the centroid
     if mask.sum() < VERIFY_MIN_PIXELS:
         return False, None
     est = np.array([x[mask].mean(), y[mask].mean()])
