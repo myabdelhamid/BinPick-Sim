@@ -21,21 +21,39 @@ class IKResult:
     ok: bool
 
 
-def _cup_down_rotation(yaw: float) -> mink.SO3:
-    """Cup axis (site z) along world -z, rotated by `yaw` about world z."""
-    return mink.SO3.from_z_radians(yaw) @ mink.SO3.from_x_radians(np.pi)
+DOWN = np.array([0.0, 0.0, -1.0])
+
+
+def cup_rotation(approach_dir: np.ndarray, yaw: float) -> np.ndarray:
+    """3x3 rotation whose z axis (cup axis) is `approach_dir`; x is world (cos yaw, sin yaw, 0)
+    projected onto the plane normal to the axis. For a straight-down approach this is Rz(yaw) Rx(pi)."""
+    z = np.asarray(approach_dir, float)
+    z = z / np.linalg.norm(z)
+    ref = np.array([np.cos(yaw), np.sin(yaw), 0.0])
+    x = ref - (ref @ z) * z
+    if np.linalg.norm(x) < 1e-6:  # axis horizontal along ref: fall back to world z as reference
+        x = np.array([0.0, 0.0, 1.0]) - z[2] * z
+    x /= np.linalg.norm(x)
+    return np.column_stack([x, np.cross(z, x), z])
 
 
 def solve_cup_down(scene: Scene, target_pos: np.ndarray, yaw: float = 0.0, q0: np.ndarray | None = None,
                    pos_tol: float = 1e-3, rot_tol: float = 1e-2, max_iters: int = 500) -> IKResult:
-    """Cup straight down at `target_pos` with wrist yaw `yaw`.
+    """Cup straight down at `target_pos` with wrist yaw `yaw`."""
+    return solve_cup_pose(scene, target_pos, DOWN, yaw, q0, pos_tol, rot_tol, max_iters)
+
+
+def solve_cup_pose(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarray, yaw: float = 0.0,
+                   q0: np.ndarray | None = None, pos_tol: float = 1e-3, rot_tol: float = 1e-2,
+                   max_iters: int = 500) -> IKResult:
+    """Cup tip at `target_pos`, cup axis along `approach_dir` (the direction the cup moves toward the part).
 
     Parts are placed by aligning their long side with the slot, which is symmetric under a
     180 deg turn, so yaw + pi is tried if yaw fails (keeps joint7 inside its limits).
     """
     best = None
     for y in (yaw, yaw + np.pi):
-        r = _solve(scene, target_pos, y, q0, pos_tol, rot_tol, max_iters)
+        r = _solve(scene, target_pos, approach_dir, y, q0, pos_tol, rot_tol, max_iters)
         if r.ok:
             return r
         if best is None or r.pos_err < best.pos_err:
@@ -43,7 +61,7 @@ def solve_cup_down(scene: Scene, target_pos: np.ndarray, yaw: float = 0.0, q0: n
     return best
 
 
-def _solve(scene: Scene, target_pos: np.ndarray, yaw: float, q0: np.ndarray | None,
+def _solve(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarray, yaw: float, q0: np.ndarray | None,
            pos_tol: float, rot_tol: float, max_iters: int) -> IKResult:
     model = scene.model
     arm_adr = [int(model.jnt_qposadr[model.joint(j).id]) for j in scene.arm_joint_names]
@@ -56,7 +74,8 @@ def _solve(scene: Scene, target_pos: np.ndarray, yaw: float, q0: np.ndarray | No
 
     cfg = mink.Configuration(model, q_full)
     task = mink.FrameTask(scene.cup_site, "site", position_cost=1.0, orientation_cost=1.0)
-    task.set_target(mink.SE3.from_rotation_and_translation(_cup_down_rotation(yaw), np.asarray(target_pos, float)))
+    task.set_target(mink.SE3.from_rotation_and_translation(mink.SO3.from_matrix(cup_rotation(approach_dir, yaw)),
+                                                        np.asarray(target_pos, float)))
     posture = mink.PostureTask(model, cost=1e-3)
     posture.set_target(q_full)
     limits = [mink.ConfigurationLimit(model)]

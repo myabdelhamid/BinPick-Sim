@@ -67,3 +67,35 @@ def test_reach_poses_are_collision_free(scene):
             if h:
                 bad.append((np.round(t, 3).tolist(), yaw, h[:2]))
     assert not bad, bad
+
+
+def test_tilted_approach(scene):
+    import mujoco
+
+    from binpick.motion.ik import solve_cup_pose
+
+    lo, hi = scene.bin_inner_bounds()
+    t = (lo + hi) / 2
+    tilt = np.deg2rad(20)
+    a = np.array([np.sin(tilt), 0.0, -np.cos(tilt)])  # cup moving toward the part, 20 deg off vertical
+    r = solve_cup_pose(scene, t, a, yaw=0.4)
+    assert r.ok
+    d = mujoco.MjData(scene.model)
+    d.qpos[:] = scene.data.qpos
+    for j, q in zip(scene.arm_joint_names, r.q):
+        d.joint(j).qpos[0] = q
+    mujoco.mj_kinematics(scene.model, d)
+    z = d.site(scene.cup_site).xmat.reshape(3, 3)[:, 2]
+    assert np.arccos(np.clip(z @ a, -1, 1)) < 0.01
+    assert np.linalg.norm(d.site(scene.cup_site).xpos - t) < 1e-3
+
+
+def test_ik_is_fast(scene):
+    import time
+
+    targets = reach_targets(scene)
+    solve_cup_down(scene, targets[0])  # warm the cache
+    t0 = time.perf_counter()
+    for t in targets:
+        solve_cup_down(scene, t)
+    assert (time.perf_counter() - t0) / len(targets) < 0.025
