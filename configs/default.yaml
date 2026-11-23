@@ -19,7 +19,7 @@ cup:
   diameter: 0.044
   length: 0.020
   rated_hold_kg: 3.0
-  tool_length: 0.050             # flange to cup base
+  tool_length: 0.200             # flange to cup base; 200 mm extension so links 5-7 clear the 200 mm deep bin walls
 
 bin:
   inner: [0.400, 0.300, 0.200]
