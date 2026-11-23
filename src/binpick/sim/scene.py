@@ -33,7 +33,6 @@ class Scene:
     slot_centers: np.ndarray
     cup_site: str = PREFIX + "cup_tip"
     cup_geom: str = PREFIX + "cup"
-    adhesion_actuator: str = "suction"
     shaker_actuators: tuple[str, str] = ("shaker_x", "shaker_y")
     bin_body: str = "bin"
     arm_actuator_names: list[str] = field(default_factory=lambda: [f"{PREFIX}actuator{i}" for i in range(1, 8)])
@@ -88,14 +87,11 @@ def _add_panda(spec: mujoco.MjSpec, cfg: Config) -> None:
                   pos=[0, 0, tl / 2], rgba=[0.2, 0.2, 0.2, 1], mass=0.15)
     cup = tool.add_body(name="cup_body", pos=[0, 0, tl])
     cup.add_geom(name="cup", type=mujoco.mjtGeom.mjGEOM_CYLINDER, size=[r, cl / 2, 0],
-                 pos=[0, 0, cl / 2], rgba=[0.9, 0.5, 0.1, 1], mass=0.05)
+                 pos=[0, 0, cl / 2], rgba=[0.9, 0.5, 0.1, 1], mass=0.05,
+                 margin=cfg.suction.margin)
     cup.add_site(name="cup_tip", pos=[0, 0, cl], size=[0.003, 0, 0])
     frame = spec.worldbody.add_frame(pos=list(cfg.layout.robot_base_pos))
     spec.attach(arm, prefix=PREFIX, frame=frame)
-    act = spec.add_actuator(name="suction", target=PREFIX + "cup_body", trntype=mujoco.mjtTrn.mjTRN_BODY)
-    act.set_to_adhesion(gain=cfg.cup.rated_hold_kg * G)
-    act.ctrlrange = [0.0, 1.0]
-    act.ctrllimited = 1
 
 
 def _add_bin(spec: mujoco.MjSpec, cfg: Config) -> None:
@@ -170,6 +166,16 @@ def _add_parts(spec: mujoco.MjSpec, cfg: Config, parts: list[PartSpec]) -> None:
                       rgba=list(mat.rgba))
 
 
+def _add_grip_welds(spec: mujoco.MjSpec, cfg: Config, parts: list[PartSpec]) -> None:
+    """One inactive weld per part. The suction model activates it when the cup seals on that part
+    and breaks it when the load exceeds what the seal can hold (see sim/suction.py)."""
+    for p in parts:
+        eq = spec.add_equality(name=f"grip_{p.id}", type=mujoco.mjtEq.mjEQ_WELD, objtype=mujoco.mjtObj.mjOBJ_BODY,
+                               name1=PREFIX + "cup_body", name2=f"part_{p.id}")
+        eq.active = 0
+        eq.solref = [cfg.suction.bellows_timeconst, 1.0]
+
+
 def build_scene(cfg: Config, parts: list[PartSpec]) -> Scene:
     spec = mujoco.MjSpec()
     spec.modelname = "binpick_cell"
@@ -188,6 +194,7 @@ def build_scene(cfg: Config, parts: list[PartSpec]) -> Scene:
     _add_tray(spec, cfg)
     _add_cameras_and_lights(spec, cfg)
     _add_parts(spec, cfg, parts)
+    _add_grip_welds(spec, cfg, parts)
 
     model = spec.compile()
     data = mujoco.MjData(model)

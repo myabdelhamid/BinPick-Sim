@@ -87,10 +87,15 @@ timing:                          # sim-time costs of non-motion phases (real cel
 
 suction:
   lip_points: 16
-  gap_ok: 0.003                  # lip height spread fully sealed by the bellows
-  gap_max: 0.008                 # spread at which the seal is lost (bellows compliance)
+  gap_ok: 0.006                  # lip height spread fully sealed by the 1.5-fold bellows
+  gap_max: 0.012                 # spread at which the seal is fully lost; sealed (q>2/3) up to ~8 mm
   contact_dist: 0.006            # lip must be within this of the surface
-  margin: 0.004                  # cup geom margin = gap: adhesion sees the surface without pushing
+  margin: 0.0005                 # cup contact margin
+  effective_radius_ratio: 0.9    # bellows effective suction radius / lip radius -> capacity 60 kPa * pi*(19.8 mm)^2 = 74 N
+  peel_lever_ratio: 0.5          # moment capacity = F_avail * lip_radius * ratio (edge lifts before full lever)
+  shear_friction: 0.5            # rubber lip friction against the part
+  bellows_timeconst: 0.02        # grip weld solref time constant: bellows compliance
+  break_filter_s: 0.02           # seal fails on load sustained ~20 ms (air must leak in), not on 2 ms spikes
   vacuum_kpa: 60.0
   sealed_threshold_kpa: 40.0
   sensor_noise_kpa: 1.0

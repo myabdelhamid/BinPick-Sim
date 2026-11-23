@@ -11,11 +11,11 @@ def test_cup_is_44mm(scene):
     assert 2 * g.size[0] == pytest.approx(0.044, abs=1e-6)
 
 
-def test_suction_actuator(scene):
-    a = scene.model.actuator(scene.adhesion_actuator)
-    assert a.trntype == mujoco.mjtTrn.mjTRN_BODY
-    assert tuple(a.ctrlrange) == (0.0, 1.0)
-    assert a.gainprm[0] == pytest.approx(3.0 * 9.81)
+def test_grip_welds_exist_inactive(scene):
+    for p in scene.parts:
+        eq = scene.model.equality(f"grip_{p.id}")
+        assert eq.type == mujoco.mjtEq.mjEQ_WELD
+        assert scene.data.eq_active[eq.id] == 0
 
 
 def test_tray_slots(scene, cfg):

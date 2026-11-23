@@ -190,6 +190,11 @@ class SuctionConfig:
     gap_max: float
     contact_dist: float
     margin: float
+    effective_radius_ratio: float
+    peel_lever_ratio: float
+    shear_friction: float
+    bellows_timeconst: float
+    break_filter_s: float
     vacuum_kpa: float
     sealed_threshold_kpa: float
     sensor_noise_kpa: float
