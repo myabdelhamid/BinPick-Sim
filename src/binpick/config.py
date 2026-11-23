@@ -142,9 +142,16 @@ class LayoutConfig:
 @dataclass(frozen=True)
 class SimConfig:
     timestep: float
+    noslip_iterations: int
+    part_solref_timeconst: float
+    part_condim: int
 
     def __post_init__(self):
         _positive(self, "timestep")
+        if self.part_solref_timeconst < 2 * self.timestep:
+            raise ValueError("part_solref_timeconst: must be >= 2 * timestep for stable contacts")
+        if self.part_condim not in (1, 3, 4, 6):
+            raise ValueError(f"part_condim: must be 1, 3, 4 or 6, got {self.part_condim}")
 
 
 @dataclass(frozen=True)

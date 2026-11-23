@@ -163,7 +163,9 @@ def _add_parts(spec: mujoco.MjSpec, cfg: Config, parts: list[PartSpec]) -> None:
         body = spec.worldbody.add_body(name=f"part_{p.id}", pos=[PARK_X0 + 0.2 * p.id, 0, hz + 0.001])
         body.add_freejoint(name=f"part_{p.id}_free")
         body.add_geom(name=f"part_{p.id}_geom", type=gtype, size=size, mass=p.mass,
-                      friction=[mat.friction, 0.005, 0.0001], rgba=list(mat.rgba))
+                      friction=[mat.friction, 0.005, 0.0001], condim=cfg.sim.part_condim,
+                      solref=[cfg.sim.part_solref_timeconst, 1.0],
+                      rgba=list(mat.rgba))
 
 
 def build_scene(cfg: Config, parts: list[PartSpec]) -> Scene:
@@ -173,6 +175,7 @@ def build_scene(cfg: Config, parts: list[PartSpec]) -> Scene:
     spec.option.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
     spec.option.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
     spec.option.impratio = 10
+    spec.option.noslip_iterations = cfg.sim.noslip_iterations
     spec.visual.global_.offwidth = max(1280, cfg.cameras.width)
     spec.visual.global_.offheight = max(960, cfg.cameras.height)
     spec.worldbody.add_geom(name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[0, 0, 0.05],

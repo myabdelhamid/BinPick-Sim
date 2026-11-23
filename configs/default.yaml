@@ -60,3 +60,6 @@ layout:
 
 sim:
   timestep: 0.002
+  noslip_iterations: 5         # removes perpetual contact jitter of wedged parts (cylinders)
+  part_solref_timeconst: 0.01  # stiffer part contacts: ~1 mm penetration under a 20-part pile
+  part_condim: 6               # torsional + rolling friction so wedged cylinders stop rocking
