@@ -12,7 +12,7 @@ Roles: the builder (Claude) writes all code, scenes, tests, benchmark and report
 ## 2. Goals, non-goals, anti-goals
 
 Goals (v1):
-- Franka Panda (MuJoCo Menagerie) + custom 44 mm suction cup. (Originally a MuJoCo adhesion actuator; replaced in M2 by a seal-gated weld with a load check, see §7. Owner approved 2026-11-24.)
+- Franka Panda (MuJoCo Menagerie) + custom 44 mm suction cup. (Originally a MuJoCo adhesion actuator; replaced in M2 by a seal-gated weld with a load check, see §7. Owner approved 2026-11-24. Since then the cup is modelled on the Piab B40.20 datasheet, §7.)
 - Bin of 20 randomly dropped parts per seed: 15 boxes, 5 cylinders.
 - Output tray with a 5 × 4 grid (20 slots).
 - One fixed top-down RGB-D camera over the bin with sensor noise, used for picking. Plus one fixed top-down camera over the tray, used only for the verify step (owner-decided addition; see §7).
@@ -92,10 +92,11 @@ Layout: robot base, bin and tray positions are the builder's call. Hard constrai
 
 MuJoCo's adhesion actuator sticks to anything it touches, so on its own it is unrealistic. It also turned out not to be calibratable: it only pulls through active contacts, so its real hold was ~70% of nominal and collapsed nonlinearly (measured in M2). The M2 design is:
 - When the seal model gives q > 0, a weld constraint holds the part to the cup (the vacuum).
-- Every step the cup-to-part interface load (weld + lip contact forces) is measured and compared with what the seal can hold, q × 74 N (60 kPa over the cup's effective area, 2.5× the 3 kg rating): utilization = tension/F + bending/(F·r·0.5) + shear/(0.5·F), filtered over 20 ms. Above 1 the grip breaks and cannot re-seal until the vacuum is cycled.
+- Every step the cup-to-part interface load (weld + lip contact forces) is measured and compared with what the seal can hold, q × 39.0 N (Piab B40.20 datasheet pull at 60 kPa; was an ideal 74 N until 2026-11-24): utilization = tension/F + bending/(F·r·0.5) + shear/(0.5·F), filtered over 20 ms. Pressing (negative tension) counts as extra clamping. Above 1 the grip breaks and cannot re-seal until the vacuum is cycled.
 - A **seal model** decides how much force is available. It is computed every control step from the *ground-truth* cup-to-part geometry in sim, never from the planner's estimate.
 - Seal quality `q ∈ [0, 1]` drops with: angle between the cup axis and the surface normal, curvature or non-planarity of the surface under the cup lip, and the fraction of the cup lip that is off the face (edges, small faces).
-- Available hold force = `q × F_rated`, where `F_rated` corresponds to about 3 kg.
+- Available hold force = `q × 39.0 N`. 39 N is 4.0 kg static, so only 1.3× the 3 kg rating. **Open owner decision:** a perfect centered grip holds 2.0 kg at current speeds but loses 2.25 and 2.5 kg in transport, so "every part is liftable" does not hold above about 2 kg.
+- Curves follow the B40's 20 mm minimum curve radius. The lip wraps onto the surface; a 40 mm cylinder is the thinnest that seals. **Assumption:** `q` falls linearly to 0.75 at that radius (the sheet gives no force there). Tilt limits are unchanged from M2 because the sheet gives no tilt data. The modelled lip stays 44 mm (B40: 43 mm lip, 46 mm body).
 - The part detaches when the required force exceeds what is available. Required force = weight + inertial load during lift and transport + peel from an off-center grip (moment arm from cup center to the part's center of mass).
 - Failure reasons are logged from the model: `no_seal`, `seal_lost_lift`, `seal_lost_transport`, `misplaced`, `ik_fail`, `collision`, `no_candidate`.
 
@@ -106,7 +107,7 @@ MuJoCo's adhesion actuator sticks to anything it touches, so on its own it is un
 
 Sim ground truth is used only by the seal physics and by the benchmark referee that scores success.
 
-This is what makes good grips succeed and bad grips fail, as the owner requires. Exact formulas and thresholds are designed in M2 and calibrated in M4 against simple physical sanity cases (flat top center → hold; 30° tilt → fail; 40 mm cylinder side → fail). Calibration is never done against benchmark results.
+This is what makes good grips succeed and bad grips fail, as the owner requires. Exact formulas and thresholds are designed in M2 and calibrated in M4 against simple physical sanity cases (flat top center → hold; 30° tilt → fail; cylinder side below 40 mm → fail (was 40 mm, changed with the B40 cup)). Calibration is never done against benchmark results.
 
 ## 8. Architecture
 

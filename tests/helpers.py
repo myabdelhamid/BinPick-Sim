@@ -42,3 +42,16 @@ def part_top(scene, i=0):
     spec = scene.parts[i]
     p = scene.data.xpos[scene.part_body_ids[i]]
     return p + np.array([0, 0, spec.dims[2] / 2 if spec.shape == "box" else spec.dims[0] / 2])
+
+
+def loose_parts_scene(cfg):
+    """Three flat boxes lying apart in the bin: nothing pins them, so every pick should work."""
+    specs = [PartSpec(i, "box", "plastic", (0.08, 0.06, h), 0.08 * 0.06 * h * 1200) for i, h in enumerate((0.05, 0.04, 0.03))]
+    s = build_scene(cfg, specs)
+    lo, hi = s.bin_inner_bounds()
+    c = (lo + hi) / 2
+    for spec, a, dx in zip(specs, s.part_qpos_adr, (-0.12, 0.0, 0.12)):
+        s.data.qpos[a:a + 3] = [c[0] + dx, c[1], lo[2] + spec.dims[2] / 2]
+    for _ in range(200):
+        mujoco.mj_step(s.model, s.data)
+    return s

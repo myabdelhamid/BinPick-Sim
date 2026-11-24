@@ -13,7 +13,7 @@ from binpick.sim.suction import SuctionCup, seal_quality
 from binpick.supervisor import machine
 from binpick.supervisor.machine import Supervisor
 from binpick.supervisor.placement import SlotAllocator
-from helpers import part_top, single_part_scene, teleport_cup
+from helpers import loose_parts_scene, part_top, single_part_scene, teleport_cup
 
 
 # --- 1. lift goes straight up, and wall tear-offs are attributed to collision ---------------
@@ -36,6 +36,8 @@ def test_tear_off_against_wall_is_collision(cfg):
         mujoco.mj_step(s.model, s.data)
     cup = SuctionCup(s, np.random.default_rng(0))
     q = teleport_cup(s, part_top(s) - [0, 0, 0.0005])
+    for _ in range(100):  # the arm settles on the part first, as in a real approach
+        mujoco.mj_step(s.model, s.data)
     cup.on()
     for _ in range(100):
         mujoco.mj_step(s.model, s.data)
@@ -93,7 +95,7 @@ def test_slot_peek_commit():
 
 
 def test_failed_transport_does_not_use_a_slot(cfg, monkeypatch):
-    s, _ = make_settled_scene(cfg, 1000)
+    s = loose_parts_scene(cfg)
     real = machine.joint_move
 
     def failing(q0, q1, m, loaded=False):

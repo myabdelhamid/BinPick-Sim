@@ -3,15 +3,14 @@ import pytest
 
 from binpick.planning.oracle import GraspTarget, oracle_targets
 from binpick.sim.parts import PartSpec
-from binpick.sim.settle import make_settled_scene
 from binpick.supervisor.machine import Supervisor
 from binpick.supervisor.records import write_csv
-from helpers import quat_axis_angle, single_part_scene
+from helpers import loose_parts_scene, quat_axis_angle, single_part_scene
 
 
 @pytest.fixture(scope="module")
 def two_picks(cfg):
-    scene, _ = make_settled_scene(cfg, 1000)
+    scene = loose_parts_scene(cfg)
     trace = []
     sup = Supervisor(scene, np.random.default_rng(0), seed=1000,
                      observer=lambda s, phase: trace.append((phase, s.data.time, s.data.xpos[s.part_body_ids].copy())))
@@ -57,17 +56,30 @@ def test_phase_times_add_up(two_picks):
 
 
 def test_bad_grasp_point_gives_no_seal(cfg):
-    cyl = PartSpec(0, "cylinder", "plastic", (0.040, 0.100), 0.15)  # 40 mm side: cannot seal
+    cyl = PartSpec(0, "cylinder", "plastic", (0.036, 0.100), 0.12)  # below the 40 mm curve limit: cannot seal
     s = single_part_scene(cfg, cyl, quat=quat_axis_angle([1, 0, 0], np.pi / 2))
     lo, _ = s.bin_inner_bounds()
     a = s.part_qpos_adr[0]
-    s.data.qpos[a + 2] = lo[2] + 0.020
+    s.data.qpos[a + 2] = lo[2] + 0.018
     import mujoco
     mujoco.mj_forward(s.model, s.data)
-    top = s.data.qpos[a:a + 3] + [0, 0, 0.020]
-    t = GraspTarget(0, top, np.array([0, 0, 1.0]), 0.0, 0.04, np.array([0, 1.0, 0]))
+    top = s.data.qpos[a:a + 3] + [0, 0, 0.018]
+    t = GraspTarget(0, top, np.array([0, 0, 1.0]), 0.0, 0.036, np.array([0, 1.0, 0]))
     r = Supervisor(s, np.random.default_rng(0), seed=0).attempt(t)
     assert r.outcome == "fail" and r.reason == "no_seal" and r.slot is None
+
+
+def test_thin_cylinder_is_picked_from_its_side(cfg):
+    import mujoco
+
+    cyl = PartSpec(0, "cylinder", "steel", (0.042, 0.100), 1.09)
+    s = single_part_scene(cfg, cyl, quat=quat_axis_angle([1, 0, 0], np.pi / 2))
+    s.data.qpos[s.part_qpos_adr[0] + 2] = s.bin_inner_bounds()[0][2] + 0.021
+    for _ in range(100):
+        mujoco.mj_step(s.model, s.data)
+    (t,) = oracle_targets(s)
+    r = Supervisor(s, np.random.default_rng(0), seed=0).attempt(t)
+    assert r.outcome == "success", r
 
 
 def test_unreachable_target_is_not_an_attempt(cfg):

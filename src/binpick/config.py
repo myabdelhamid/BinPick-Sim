@@ -195,7 +195,10 @@ class SuctionConfig:
     gap_max: float
     contact_dist: float
     margin: float
-    effective_radius_ratio: float
+    travel: float
+    curve_radius_min: float
+    curve_limit_q: float
+    pull_force_n: float
     peel_lever_ratio: float
     shear_friction: float
     bellows_timeconst: float
@@ -207,7 +210,10 @@ class SuctionConfig:
     sensor_noise_kpa: float
 
     def __post_init__(self):
-        _positive(self, "lip_points", "gap_max", "contact_dist", "vacuum_kpa", "sealed_threshold_kpa")
+        _positive(self, "lip_points", "gap_max", "contact_dist", "travel", "curve_radius_min", "pull_force_n",
+                  "vacuum_kpa", "sealed_threshold_kpa")
+        if not 0 < self.curve_limit_q <= 1:
+            raise ValueError("curve_limit_q: must be in (0, 1]")
         if not 0 <= self.gap_ok < self.gap_max:
             raise ValueError(f"gap_ok: need 0 <= gap_ok < gap_max, got {self.gap_ok}, {self.gap_max}")
         if self.sealed_threshold_kpa >= self.vacuum_kpa:
