@@ -72,3 +72,19 @@ def test_validate_rejects_moving_pile(cfg):
 @pytest.mark.parametrize("seed", [1030, 1031])
 def test_slow_piles_get_the_time_they_need(cfg, seed):
     make_settled_scene(cfg, seed)  # needed up to 2.3 s more than one final pass; raised SettleError before
+
+
+def test_steady_contact_jitter_does_not_void_a_bin(cfg):
+    scene, _ = make_settled_scene(cfg, 1107)  # one box jitters at ~2 mm/s for as long as you wait
+    assert len(scene.parts) == 20
+
+
+def test_real_motion_is_not_taken_for_jitter(cfg):
+    from binpick.sim.settle import DRIFT_MAX, _drift
+
+    scene, _ = make_settled_scene(cfg, 1000)
+    assert _drift(scene) < DRIFT_MAX
+    top = int(np.argmax(scene.data.xpos[scene.part_body_ids][:, 2]))
+    a = scene.model.jnt_dofadr[scene.model.body_jntadr[scene.part_body_ids[top]]]
+    scene.data.qvel[a + 2] = 0.5  # thrown upwards
+    assert _drift(scene) > DRIFT_MAX

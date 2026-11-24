@@ -12,6 +12,7 @@ from binpick.sim.parts import sample_parts
 from binpick.sim.scene import PARK_X0, Scene, build_scene
 
 FINAL_PASSES = 4
+DRIFT_S, DRIFT_MAX = 0.5, 0.001  # a pile that moves no part 1 mm in half a second is at rest, even if one jitters
 MIN_SETTLE_S = 0.2  # always simulate at least this long after a drop
 
 
@@ -94,19 +95,32 @@ def settle_parts(scene: Scene, rng: np.random.Generator) -> list[PartPose]:
         if _settled(scene, _part_dofs(scene, placed)):
             break
     mujoco.mj_forward(scene.model, scene.data)
-    validate_settled(scene)
+    # a part wedged between others can jitter in place forever (contact solver); it goes nowhere
+    jitter = not _settled(scene, _part_dofs(scene, placed)) and _drift(scene) < DRIFT_MAX
+    validate_settled(scene, jitter_ok=jitter)
     return [
         PartPose(p.id, scene.data.qpos[a:a + 3].copy(), scene.data.qpos[a + 3:a + 7].copy())
         for p, a in zip(scene.parts, scene.part_qpos_adr)
     ]
 
 
-def validate_settled(scene: Scene) -> None:
-    """Raise SettleError unless every part is inside the bin and at rest."""
+def _drift(scene: Scene) -> float:
+    """Largest distance any part center moves in the next DRIFT_S seconds (simulates them)."""
+    p0 = scene.data.xpos[scene.part_body_ids].copy()
+    for _ in range(int(DRIFT_S / scene.model.opt.timestep)):
+        mujoco.mj_step(scene.model, scene.data)
+    mujoco.mj_forward(scene.model, scene.data)
+    return float(np.linalg.norm(scene.data.xpos[scene.part_body_ids] - p0, axis=1).max())
+
+
+def validate_settled(scene: Scene, jitter_ok: bool = False) -> None:
+    """Raise SettleError unless every part is inside the bin and at rest (or only jittering in place)."""
     s = scene.cfg.settle
     for i, part in enumerate(scene.parts):
         if not _inside(scene, i):
             raise SettleError(part.id, "ended outside the bin (knocked out by a later drop)")
+        if jitter_ok:
+            continue
         d = _part_dofs(scene, [i])[0]
         v = scene.data.qvel
         if np.linalg.norm(v[d:d + 3]) >= s.lin_tol or np.linalg.norm(v[d + 3:d + 6]) >= s.ang_tol:
