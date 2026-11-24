@@ -194,6 +194,15 @@ def test_contact_on_the_fast_approach_stops_the_arm(cfg):
     assert low[-1] > s.bin_inner_bounds()[1][2]  # backed out
 
 
+def test_free_motion_leaves_almost_no_unexplained_force(cfg):
+    low = dataclasses.replace(cfg, motion=dataclasses.replace(cfg.motion, guard_force_n=12.0))  # half the real threshold
+    for xy in ((0, 0), (0.12, 0.08), (-0.12, -0.08)):
+        s = single_part_scene(low, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3), xy_offset=xy)
+        for _ in range(100):
+            mujoco.mj_step(s.model, s.data)
+        assert Supervisor(s, np.random.default_rng(0), seed=0).attempt(oracle_targets(s)[0]).outcome == "success", xy
+
+
 def test_normal_approaches_are_not_taken_for_contact(cfg):
     for xy in ((0, 0), (0.12, 0.08), (-0.12, -0.08), (0.1, -0.09)):
         s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3), xy_offset=xy)

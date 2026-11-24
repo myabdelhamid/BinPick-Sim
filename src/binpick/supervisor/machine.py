@@ -95,6 +95,7 @@ class Supervisor:
         """Move with the empty cup; stop if the joints carry a force on the cup that the motion does not explain."""
         scene, m, d = self.scene, self.scene.model, self.scene.data
         J, ids = np.zeros((3, m.nv)), [m.actuator(a).id for a in scene.arm_actuator_names]
+        kv_dt = np.array([-m.actuator_biasprm[i, 2] for i in ids]) * m.opt.timestep
         over, vel = 0, [d.qvel[self._dofs].copy()]
 
         def step(sc: Scene) -> bool:
@@ -106,7 +107,9 @@ class Supervisor:
             acc = (vel[-1] - vel[0]) / (max(len(vel) - 1, 1) * m.opt.timestep)  # from the joint readings
             expected = scene.arm_torque(self._q(), vel[-1], acc)
             mujoco.mj_jacSite(m, d, J, None, self._tip)
-            f = np.linalg.pinv(J[:, self._dofs].T) @ (d.actuator_force[ids] - expected)
+            # the simulator damps the motors implicitly: over a step they deliver this much less than their reading
+            delivered = d.actuator_force[ids] - kv_dt * acc
+            f = np.linalg.pinv(J[:, self._dofs].T) @ (delivered - expected)
             over = over + 1 if np.linalg.norm(f) > scene.cfg.motion.guard_force_n else 0
             return over < GUARD_STEPS
 
