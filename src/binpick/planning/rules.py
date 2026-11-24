@@ -58,12 +58,13 @@ def _lay_cup(view: BinView, pos: np.ndarray, n: np.ndarray, cfg: Config):
     seg = np.hypot(step, dh)
     bad = ~(np.abs(dh) <= cfg.perception.max_slope * step)
     arc = np.cumsum(seg, axis=2)
-    end = np.argmax(arc >= r - 1e-9, axis=2)                                              # first segment past the lip
+    reached = arc >= r - 1e-9  # False from the first unseen (NaN) sample on
+    end = np.where(reached.any(axis=2), np.argmax(reached, axis=2), LIP_STEPS - 1)         # first segment past the lip
     take = lambda a: np.take_along_axis(a, end[..., None], axis=2)[..., 0]  # noqa: E731
     left = r - (take(arc) - take(seg))
     lip = take(prev) + take(dh) * left / take(seg)
     used = np.arange(LIP_STEPS)[None, None] <= end[..., None]
-    lip = np.where((bad & used).any(axis=2) | _creased(h, used, step, np.deg2rad(cfg.perception.crease_deg)), np.nan, lip)
+    lip = np.where(~reached.any(axis=2) | (bad & used).any(axis=2) | _creased(h, used, step, np.deg2rad(cfg.perception.crease_deg)), np.nan, lip)
     # plane fit to the points under the cup (in tangent coordinates)
     px, py = d[None, :] * np.cos(th)[:, None], d[None, :] * np.sin(th)[:, None]
     w = (used & np.isfinite(h)).astype(float)
