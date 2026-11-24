@@ -1,3 +1,5 @@
+import dataclasses
+
 import mujoco
 import numpy as np
 import pytest
@@ -141,3 +143,21 @@ def test_sideways_hold_reduces_the_sag_under_a_load(empty, cfg, gain, worst):
         empty.data.xfrc_applied[body, 2] = 0.0
         sag.append(np.linalg.norm(empty.data.site(empty.cup_site).xpos[:2] - p0[:2]))
     assert sag[0] > 3e-4 and sag[1] < worst * sag[0]
+
+
+def test_a_waypoint_a_little_off_the_line_is_better_than_no_line(empty, cfg, monkeypatch):
+    """The tight tolerance is a goal; only a waypoint missed by more than the normal tolerance makes a line infeasible."""
+    from binpick.motion import trajectory as tr
+    real = tr.solve_cup_pose
+
+    def slightly_off(*a, **k):
+        r = real(*a, **k)
+        return dataclasses.replace(r, ok=False, pos_err=5e-4)
+
+    p = (lambda b: np.r_[(b[0] + b[1])[:2] / 2, b[0][2] + 0.1])(empty.bin_inner_bounds())
+    q0 = teleport_cup(empty, p)
+    monkeypatch.setattr(tr, "solve_cup_pose", slightly_off)
+    assert cartesian_line(empty, q0, p, p + [0, 0, 0.1], DOWN, 0.0, cfg.motion).duration > 0
+    monkeypatch.setattr(tr, "solve_cup_pose", lambda *a, **k: dataclasses.replace(real(*a, **k), ok=False, pos_err=5e-3))
+    with pytest.raises(tr.IKError):
+        cartesian_line(empty, q0, p, p + [0, 0, 0.1], DOWN, 0.0, cfg.motion)

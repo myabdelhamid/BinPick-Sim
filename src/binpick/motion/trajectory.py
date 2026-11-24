@@ -15,6 +15,7 @@ from binpick.sim.scene import Scene
 
 SAMPLE_DT = 0.01
 LINE_POS_TOL, LINE_ROT_TOL = 1e-4, 1e-3  # waypoints of a straight line: a wavy line drags parts against their neighbours
+MAX_POS_ERR, MAX_ROT_ERR = 1e-3, 1e-2          # a waypoint missed by more than this makes the line infeasible
 MAX_WAYPOINT_JUMP = 0.3  # rad; larger means an IK branch flip between neighbouring waypoints
 # Time scaling: trapezoidal velocity whose acceleration phases are "modified trapezoid" pulses
 # (sine jerk ramps over the first and last quarter, constant in the middle): finite jerk, and the
@@ -110,7 +111,7 @@ def cartesian_path(scene: Scene, q0: np.ndarray, points: list, approach_dir: np.
     qs, q = [], np.asarray(q0, float)
     for i, p in enumerate(way):
         r = solve_cup_pose(scene, p, approach_dir, yaw, q0=q, pos_tol=LINE_POS_TOL, rot_tol=LINE_ROT_TOL, flip=i == 0)
-        if not r.ok:
+        if not r.ok and (r.pos_err > MAX_POS_ERR or r.rot_err > MAX_ROT_ERR):
             raise IKError(f"waypoint {i}/{len(way) - 1} unreachable (pos_err={r.pos_err:.4f})")
         if np.abs(r.q - q).max() > MAX_WAYPOINT_JUMP:  # waypoint 0 is checked against q0 (no step command)
             raise IKError(f"IK branch jump at waypoint {i}")

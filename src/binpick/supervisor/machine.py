@@ -258,10 +258,10 @@ class Supervisor:
             # Straight up, whatever the face tilt: lifting along a tilted normal drags parts that lean on
             # a wall (or a neighbour) into it. Cup orientation is kept.
             p1 = np.r_[p_grip[:2], max(clear_z, p_grip[2] + cfg.motion.lift_dist)]
-            # The first millimetres also go a little sideways, away from what touches the part.
+            # The first millimetres also go a little sideways, away from a wall the part touches.
             side = p_grip + np.r_[np.asarray(target.away) * cfg.motion.lift_away, cfg.motion.lift_away_rise]
             m = dataclasses.replace(cfg.motion, max_cart_acc=cfg.motion.lift_acc)
-            path = cartesian_path(scene, self._q(), [p_grip, side, np.r_[side[:2], p1[2]]], -n, self._grasp_yaw(), m)
+            path = cartesian_path(scene, self._q(), [p_grip, side, np.r_[side[:2], p1[2]]], R_grip[:, 2], self._grasp_yaw(), m)
             if not self._run(path, sideways_gain=cfg.motion.lift_sideways_gain):
                 raise _Abort("seal_lost_lift")
             self.felt_mass_kg = self._pull() / G

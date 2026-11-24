@@ -20,4 +20,4 @@ class GraspTarget:
     score: float = 0.0
     crowd: float = 0.0      # share of the surface's outline with something taller next to it
     safe: bool = True       # free, centered and level as far as the camera can tell
-    away: np.ndarray = field(default_factory=lambda: np.zeros(2))  # sideways direction (xy, length 0-1) clear of what touches the part
+    away: np.ndarray = field(default_factory=lambda: np.zeros(2))  # away from walls the part touches (xy, 0-1 each)

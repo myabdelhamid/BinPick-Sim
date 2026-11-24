@@ -255,27 +255,18 @@ def test_face_narrower_than_the_cup_is_not_a_target(cfg, k):
     assert targets(narrow_box(cfg, 0.0425, k)) == []
 
 
-def test_lift_direction_points_away_from_a_touching_wall(cfg):
+@pytest.mark.parametrize("gap_mm,push", [(0.0, True), (1.0, True), (6.0, False)])
+@pytest.mark.parametrize("lying", [False, True])
+def test_lift_direction_points_away_from_a_touching_wall(cfg, gap_mm, push, lying):
     ix = cfg.bin.inner[0]
-    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3), xy_offset=(-(ix / 2 - 0.0405), 0.0))
+    s = lying_cylinder(cfg, 0.05) if lying else single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3))
+    s.data.qpos[s.part_qpos_adr[0]] = s.bin_inner_bounds()[0][0] + (0.025 if lying else 0.04) + gap_mm * 1e-3
     t = targets(s)[0]
-    assert t.away[0] > 0.8 and abs(t.away[1]) < 0.2
+    assert (t.away[0] > 0.9) if push else (t.away[0] < 0.1)
+    assert t.away[1] == 0
 
 
-def test_lift_direction_points_away_from_a_touching_neighbour(cfg):
+def test_no_lift_direction_away_from_neighbours(cfg):
     a, b = (PartSpec(k, "box", "plastic", (0.08, 0.08, h), 0.3) for k, h in ((0, 0.05), (1, 0.03)))
     s = two_parts(cfg, a, b, [0, 0, 0.025], [0, 0.0805, 0.015])
-    t = next(t for t in targets(s) if abs(t.pos[1]) < 0.03)
-    assert t.away[1] < -0.8 and abs(t.away[0]) < 0.2
-
-
-def test_no_lift_direction_when_free_or_held_from_both_sides(cfg):
-    free = targets(single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3)))[0]
-    assert np.linalg.norm(free.away) < 0.1
-    s = build_scene(cfg, [PartSpec(k, "box", "plastic", (0.08, 0.08, 0.05 - 0.02 * (k > 0)), 0.3) for k in range(3)])
-    lo, hi = s.bin_inner_bounds()
-    base = np.r_[(lo + hi)[:2] / 2, lo[2] + 0.025]
-    for adr, x in zip(s.part_qpos_adr, (0, 0.0805, -0.0805)):
-        s.data.qpos[adr:adr + 3] = base + [x, 0, -0.01 * (x != 0)]
-    mid = min(targets(s), key=lambda t: abs(t.pos[0] - base[0]))
-    assert np.linalg.norm(mid.away) < 0.2
+    assert all(np.all(t.away == 0) for t in targets(s))

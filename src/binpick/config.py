@@ -280,7 +280,8 @@ class PlannerConfig:
     w_crowd: float
     oversize_margin: float
     crowd_reach: float
-    touch_band: tuple[float, float]
+    wall_touch: tuple[float, float]
+    flank_unseen: float
     safe_crowd: float
     safe_offset: float
     safe_tilt_deg: float

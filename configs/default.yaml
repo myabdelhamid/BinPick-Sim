@@ -85,7 +85,7 @@ motion:
   approach_overtravel: 0.002     # go this far past the surface (cup margin absorbs it)
   lift_dist: 0.06                # lift at least this far
   lift_acc: 1.5                  # m/s^2, lifting out of the pile
-  lift_away: 0.0015              # m, sideways shift away from whatever touches the part ...
+  lift_away: 0.0015              # m, sideways shift away from a wall the part touches ...
   lift_away_rise: 0.006          # ... over the first 6 mm of the lift
   lift_sideways_gain: 3.0        # sideways stiffness added from the joint readings while lifting
   heavy_kg: 1.2                  # a part felt to be heavier than this ...
@@ -157,7 +157,8 @@ planner:
   w_crowd: 1.0                   # penalty for the share of the outline with something taller next to it (pinned?)
   oversize_margin: 0.006         # a surface longer than the longest part plus this is two parts
   crowd_reach: 0.008             # how far around the surface to look for that
-  touch_band: [0.006, 0.010]     # something seen this far beyond a surface's seen edge (4 mm inside the real one) touches it
+  wall_touch: [0.006, 0.008]     # a flat surface seen this close to a wall touches it ... surely not (its seen edge is 4 mm inside)
+  flank_unseen: 0.0035           # a curved side reaches this much further
   safe_crowd: 0.01               # a pick is safe with at most this share of the outline crowded, ...
   safe_offset: 0.003             # ... the cup this close to the surface center ...
   safe_tilt_deg: 5.0             # ... and the surface this level; risky picks wait until shaking brings no safe one

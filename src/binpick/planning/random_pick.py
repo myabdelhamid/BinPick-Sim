@@ -8,7 +8,7 @@ from scipy import ndimage
 
 from binpick.config import Config
 from binpick.perception.view import BinView
-from binpick.planning.rules import flat_face, free_direction, max_depth, surface_rectangle
+from binpick.planning.rules import flat_face, max_depth, surface_rectangle, wall_direction
 from binpick.planning.types import GraspTarget
 
 
@@ -30,7 +30,7 @@ def random_targets(view: BinView, cfg: Config, rng: np.random.Generator, n: int 
             return []  # nothing but slivers in view
         if lab not in faces:
             flat = flat_face(view, lab)
-            faces[lab] = (None if flat is None else flat.n, *surface_rectangle(view, lab)[:2], free_direction(view, lab, cfg))
+            faces[lab] = (None if flat is None else flat.n, *surface_rectangle(view, lab)[:2], wall_direction(view, lab, flat is not None, cfg))
         flat_n, center, axis, away = faces[lab]
         normal = view.normals[own] if flat_n is None else flat_n  # on a flat face single cells only add noise
         out.append(GraspTarget(None, p, normal, float(np.degrees(np.arccos(normal[2]))), max_depth(view, p, normal, cfg),
