@@ -164,6 +164,7 @@ planner:
   crowd_reach: 0.010             # how far around the surface to look for that
   wall_touch: [0.006, 0.008]     # a flat surface seen this close to a wall touches it ... surely not (its seen edge is 4 mm inside)
   flank_unseen: 0.0035           # a curved side reaches this much further
+  unseen_reach: 0.015            # an unseen strip up to this wide counts as whatever is seen beyond it
   safe_crowd: 0.01               # a pick is safe with at most this share of the outline crowded, ...
   safe_offset: 0.003             # ... the cup this close to the surface center ...
   safe_tilt_deg: 5.0             # ... and the surface this level; risky picks wait until shaking brings no safe one

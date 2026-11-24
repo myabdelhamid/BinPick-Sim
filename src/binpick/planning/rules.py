@@ -264,11 +264,13 @@ def _near_surface(view: BinView, label: int, p: np.ndarray, reach: float = 0.008
 
 
 def _crowding(view: BinView, label: int, cfg: Config) -> float:
-    """Share of the surface's outline with something taller right next to it: such a part may be pinned."""
-    k = int(round(cfg.planner.crowd_reach / view.cell))
+    """Share of the surface's outline with something taller right next to it: such a part may be pinned. An unseen strip
+    (hidden behind the side of a tall part) counts as whatever is seen beyond it."""
+    pl = cfg.planner
+    k, far = int(round(pl.crowd_reach / view.cell)), int(round(pl.unseen_reach / view.cell))
     mask = view.labels == label
     ij = np.argwhere(mask)
-    lo, hi = np.maximum(ij.min(axis=0) - k - 1, 0), ij.max(axis=0) + k + 2
+    lo, hi = np.maximum(ij.min(axis=0) - k - far - 1, 0), ij.max(axis=0) + k + far + 2
     box = (slice(lo[0], hi[0]), slice(lo[1], hi[1]))
     m, z = mask[box], view.z[box]
     dist, near = ndimage.distance_transform_edt(~m, return_indices=True)
@@ -276,10 +278,14 @@ def _crowding(view: BinView, label: int, cfg: Config) -> float:
     n = view.normals[mask].mean(axis=0)
     ii, jj = np.mgrid[0:m.shape[0], 0:m.shape[1]]
     # surface height expected here if the nearest surface cell continued along the mean plane
-    expect = z[near[0], near[1]] - (n[0] * (ii - near[0]) + n[1] * (jj - near[1])) * view.cell / n[2]
-    taller = rim & (z - expect > cfg.planner.obstacle_height)  # unseen cells (NaN) do not count
+    above = z - z[near[0], near[1]] + (n[0] * (ii - near[0]) + n[1] * (jj - near[1])) * view.cell / n[2]
+    other = np.isfinite(above) & (np.abs(above) > pl.obstacle_height)  # seen, and not this surface running on
+    if other.any():
+        d, src = ndimage.distance_transform_edt(~other, return_indices=True)
+        above = np.where(np.isnan(above) & (d <= far), above[src[0], src[1]], above)
     outline = m & ~ndimage.binary_erosion(m)
     touched = np.zeros(m.shape, bool)
+    taller = rim & (above > pl.obstacle_height)
     touched[near[0][taller], near[1][taller]] = True
     return float((touched & outline).sum() / outline.sum())
 

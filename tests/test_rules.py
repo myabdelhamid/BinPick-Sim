@@ -294,3 +294,13 @@ def test_free_sides_before_boxed_in(cfg):
             s.data.qpos[adr:adr + 3] = base + p
         t = targets(s)[0]
         assert (t.pos[0] - base[0]) * dx < 0
+
+
+def test_a_part_hidden_under_the_side_of_a_tall_one_is_not_safe(cfg):
+    """Seen at a slant, the tall part's side hides a wide strip next to the visible face: unseen is not free."""
+    for seed, where in ((1009, [0.0596, 0.0850]), (1002, [0.3576, 0.2366])):
+        s, _ = make_settled_scene(cfg, seed)
+        s.sensor_rng = np.random.default_rng([seed, 5])
+        lo, _ = s.bin_inner_bounds()
+        near = [t for t in targets(s) if np.linalg.norm(t.pos[:2] - lo[:2] - where) < 0.02]
+        assert not any(t.safe for t in near), seed

@@ -287,6 +287,7 @@ class PlannerConfig:
     crowd_reach: float
     wall_touch: tuple[float, float]
     flank_unseen: float
+    unseen_reach: float
     safe_crowd: float
     safe_offset: float
     safe_tilt_deg: float
