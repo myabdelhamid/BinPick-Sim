@@ -178,6 +178,17 @@ def _continue_face(z: np.ndarray, flat: np.ndarray, face: Face) -> np.ndarray:
     return np.where(use, model, z)
 
 
+def _room(face: Face | None, pos: np.ndarray, r: float) -> np.ndarray:
+    """How far the face reaches beyond the cup lip on its narrowest side; unlimited if its edges are not known."""
+    if face is None:
+        return np.full(len(pos), np.inf)
+    d = pos - face.center
+    room = face.half[0] - np.abs(d @ face.a)
+    if face.radius is None:
+        room = np.minimum(room, face.half[1] - np.abs(d @ face.b))
+    return room - r
+
+
 def _lay_cup(view: BinView, pos: np.ndarray, n: np.ndarray, cfg: Config, lab: np.ndarray, faces: dict[int, Face | None]):
     """Wrap the lip around each (pos, n). Returns lip heights below the cup plane (N, K), NaN where the lip
     cannot sit, and the plane normal fitted to all points under the cup."""
@@ -426,6 +437,7 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
             continue  # larger than any part: two parts the camera cannot tell apart
         seal = 1.0 - (1.0 - s.curve_limit_q) * drop[sel] / limit
         off = np.linalg.norm((pos[sel] - center)[:, :2], axis=1)
+        room = _room(faces[c], pos[sel], r)
         crowd, away = _crowding(view, c, cfg), wall_direction(view, c, faces[c] is not None and faces[c].radius is None, cfg)
         score = (pl.w_height * (pos[sel, 2] - view.lo[2]) / (view.hi[2] - view.lo[2]) + pl.w_seal * seal
                  + pl.w_wall * np.minimum(wall[sel] / pl.wall_saturation, 1.0)
@@ -438,7 +450,7 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
             out.append((bool(drop[g] > pl.flat_drop), GraspTarget(
                 None, pos[g], n[g], float(tilt[g]), max_depth(view, pos[g], n[g], cfg), axis, center,
                 float(seal[m]), float(score[m]), crowd,
-                bool(crowd <= pl.safe_crowd and off[m] <= pl.safe_offset and tilt[g] <= pl.safe_tilt_deg), away)))
+                bool(crowd <= pl.safe_crowd and room[m] >= pl.safe_room and off[m] <= pl.safe_offset and tilt[g] <= pl.safe_tilt_deg), away)))
             kept += 1
             if kept == pl.per_surface:
                 break

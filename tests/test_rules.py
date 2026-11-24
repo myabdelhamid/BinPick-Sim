@@ -328,3 +328,12 @@ def test_cylinder_shorter_than_the_cup_is_not_a_target(cfg):
         s.data.qpos[s.part_qpos_adr[0] + 2] = s.bin_inner_bounds()[0][2] + 0.025
         s.sensor_rng = np.random.default_rng(k)
         assert targets(s) == []
+
+
+@pytest.mark.parametrize("w,safe", [(0.0450, False), (0.0480, True)])
+def test_a_face_barely_wider_than_the_cup_is_risky(cfg, w, safe):
+    n = []
+    for k in range(6):
+        ts = targets(narrow_box(cfg, w, 40 + k))
+        n += [ts[0].safe] if ts else []
+    assert len(n) >= 4 and all(x == safe for x in n)

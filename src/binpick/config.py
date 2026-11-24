@@ -290,6 +290,7 @@ class PlannerConfig:
     flank_unseen: float
     unseen_reach: float
     safe_crowd: float
+    safe_room: float
     safe_offset: float
     safe_tilt_deg: float
     wall_saturation: float
