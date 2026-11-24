@@ -62,7 +62,9 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
         sup.observer = lambda s, phase: observer(s, phase, sup)
     pick_rng, shake_rng = np.random.default_rng([seed, 3]), np.random.default_rng([seed, 4])
     seen = {"empty": False}
-    failed: list[np.ndarray] = []  # points that failed since the pile last changed (a pick or a shake)
+    # points that failed since the pile last changed (a pick or a shake), by what the robot sensed
+    no_seal: list[np.ndarray] = []
+    stuck: list[np.ndarray] = []
 
     def propose():
         view = observe_bin(scene)
@@ -71,7 +73,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             return []
         if planner == "random":
             return random_targets(view, cfg, pick_rng)
-        return rules_targets(view, cfg, avoid=failed)
+        return rules_targets(view, cfg, avoid=no_seal, avoid_surfaces=stuck)
 
     t0, shakes, in_a_row = scene.data.time, 0, 0
     while True:
@@ -84,9 +86,9 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
         if sup.attempt(propose) is not None:
             in_a_row = 0
             if sup.last_success_sensed:
-                failed.clear()
+                no_seal.clear(), stuck.clear()
             else:
-                failed.append(sup.last_target.pos)
+                (no_seal if sup.records[-1].sensed == "no_seal" else stuck).append(sup.last_target.pos)
             continue
         if seen["empty"]:
             stop = "empty"
@@ -96,7 +98,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             break
         sup.shake(shake_rng)
         shakes, in_a_row = shakes + 1, in_a_row + 1
-        failed.clear()
+        no_seal.clear(), stuck.clear()
 
     # ---- scoring (ground truth)
     mujoco.mj_forward(scene.model, scene.data)

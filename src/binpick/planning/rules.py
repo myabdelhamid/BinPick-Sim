@@ -139,6 +139,13 @@ def surface_rectangle(view: BinView, label: int) -> tuple[np.ndarray, np.ndarray
     return p + mid[0] * x + mid[1] * y, ax[0] * x + ax[1] * y, float(size.max())
 
 
+def _near_surface(view: BinView, label: int, p: np.ndarray, reach: float = 0.008) -> bool:
+    """The surface passes through p, allowing for the part having shifted a little."""
+    (i0, j0), (i1, j1) = view.index(p[:2] - reach), view.index(p[:2] + reach)
+    hit = (view.labels[i0:i1 + 1, j0:j1 + 1] == label) & (np.abs(view.z[i0:i1 + 1, j0:j1 + 1] - p[2]) < reach)
+    return bool(hit.any())
+
+
 def _crowding(view: BinView, label: int, cfg: Config) -> float:
     """Fraction of the surface's outline with something taller right next to it: such a part may be pinned."""
     k = int(round(cfg.planner.crowd_reach / view.cell))
@@ -168,8 +175,10 @@ def max_depth(view: BinView, p: np.ndarray, n: np.ndarray, cfg: Config) -> float
     return float(min(longest_part(cfg), (p[2] - view.lo[2]) / max(n[2], 0.2)))
 
 
-def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = ()) -> list[GraspTarget]:
-    """Targets, best first. Points within `run.avoid_radius` of one in `avoid` (it just failed) are left out."""
+def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
+                  avoid_surfaces: Sequence[np.ndarray] = ()) -> list[GraspTarget]:
+    """Targets, best first. Left out: points within `run.avoid_radius` of one in `avoid` (no seal there), and whole
+    surfaces at a point in `avoid_surfaces` (the part could not be lifted from there)."""
     pl, s, r = cfg.planner, cfg.suction, cfg.cup.diameter / 2
     k = max(1, int(round(pl.candidate_step / view.cell)))
     grid = np.zeros(view.z.shape, bool)
@@ -203,6 +212,8 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = ()) 
     out: list[tuple[bool, GraspTarget]] = []
     for c in np.unique(lab[ok]):
         sel = np.where(ok & (lab == c))[0]
+        if any(_near_surface(view, c, f) for f in avoid_surfaces):
+            continue
         center, axis, length = surface_rectangle(view, c)
         if length > longest_part(cfg) + pl.oversize_margin:
             continue  # larger than any part: two parts the camera cannot tell apart

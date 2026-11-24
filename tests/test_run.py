@@ -109,3 +109,27 @@ def test_summary_reports_all_cycle_times(cfg):
     assert s["cycle_mean_all_s"] == pytest.approx(np.mean([x.cycle_time_s for x in r.records]))
     assert s["sim_time_per_placed_s"] == pytest.approx(r.sim_time_s / r.placed)
     assert s["over_8s"] == sum(x.cycle_time_s > 8.0 for x in r.records if x.outcome == "success")
+
+
+def test_a_part_lost_in_lift_is_left_alone_until_the_pile_changes(cfg, monkeypatch):
+    """Losing the part while lifting means it is stuck: other spots on the same surface would fail too."""
+    from binpick.supervisor import machine
+
+    big = PartSpec(0, "box", "plastic", (0.11, 0.11, 0.05), 0.7)   # best target, several spots
+    small = PartSpec(1, "box", "plastic", (0.07, 0.07, 0.03), 0.2)
+    s = build_scene(cfg, [big, small])
+    lo, hi = s.bin_inner_bounds()
+    c = (lo + hi) / 2
+    for a, dx, h in zip(s.part_qpos_adr, (-0.1, 0.1), (0.05, 0.03)):
+        s.data.qpos[a:a + 3] = [c[0] + dx, c[1], lo[2] + h / 2]
+    for _ in range(150):
+        mujoco.mj_step(s.model, s.data)
+
+    def stuck(self, phase, rec, target, n):
+        raise machine._Abort("seal_lost_lift")
+
+    monkeypatch.setattr(machine.Supervisor, "_lift_transport_place", stuck)
+    r = run_bin(s, "rules", seed=0, max_attempts=4)
+    assert [x.target_part for x in r.records[:2]] == [0, 1]           # moves on at once
+    assert r.events[0]["event"] == "shake" and r.shakes >= 1          # then shakes, then may try again
+    assert len(r.records) == 4 and r.stop == "attempt_limit"
