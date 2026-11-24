@@ -75,6 +75,18 @@ def _height_map(P: np.ndarray, lo: np.ndarray, hi: np.ndarray, cell: float) -> n
     return z
 
 
+def _grooves(P: np.ndarray, lo: np.ndarray, cell: float, shape: tuple[int, int], width: float, depth: float) -> np.ndarray:
+    """Cells where the camera saw into a narrow gap between two parts. The height map keeps the highest point
+    per cell, so gaps of a pixel or two must be found in the image itself (black top-hat)."""
+    px = max(3, 2 * int(np.ceil(width / cell / 2)) + 1)
+    hit = P[ndimage.black_tophat(P[..., 2], size=(px, px)) > depth]
+    ij = np.round((hit[:, :2] - lo[:2]) / cell).astype(int)
+    ij = ij[np.all((ij >= 0) & (ij < shape), axis=1)]
+    g = np.zeros(shape, bool)
+    g[tuple(ij.T)] = True
+    return ndimage.binary_dilation(g, iterations=1)
+
+
 def _normals(z: np.ndarray, cell: float) -> np.ndarray:
     k = NORMAL_SPAN
     gx, gy = np.full_like(z, np.nan), np.full_like(z, np.nan)
@@ -109,6 +121,7 @@ def observe_bin(scene: Scene) -> BinView:
     P = depth_to_cloud(depth, intrinsics(scene, "bin_cam"), cam.xpos, cam.xmat.reshape(3, 3))
     lo, hi = scene.bin_inner_bounds()
     z = _height_map(P, lo, hi, cfg.cell)
+    z[_grooves(P, lo, cfg.cell, z.shape, cfg.groove_width, cfg.groove_depth)] = np.nan
     normals = _normals(z, cfg.cell)
     part = z > lo[2] + cfg.min_part_height
     m = int(np.ceil(cfg.wall_margin / cfg.cell))  # wall faces seen at a slant land on the border cells

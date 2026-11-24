@@ -237,6 +237,8 @@ class PerceptionConfig:
     wall_margin: float
     max_slope: float
     crease_deg: float
+    groove_width: float
+    groove_depth: float
     min_surface_mm2: float
     empty_mm2: float
 
@@ -259,6 +261,7 @@ class PlannerConfig:
     w_wall: float
     w_center: float
     w_crowd: float
+    oversize_margin: float
     crowd_reach: float
     wall_saturation: float
 

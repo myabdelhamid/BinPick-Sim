@@ -11,6 +11,7 @@ from binpick.config import Config
 from binpick.sim.parts import sample_parts
 from binpick.sim.scene import PARK_X0, Scene, build_scene
 
+FINAL_PASSES = 4
 MIN_SETTLE_S = 0.2  # always simulate at least this long after a drop
 
 
@@ -88,7 +89,10 @@ def settle_parts(scene: Scene, rng: np.random.Generator) -> list[PartPose]:
             _park(scene, i)
         else:
             raise SettleError(part.id, f"escaped the bin on {s.max_redrops + 1} drops")
-    _run_until_settled(scene, _part_dofs(scene, placed))  # final pass over the whole pile
+    for _ in range(FINAL_PASSES):  # whole pile; stops at the first pass that ends at rest
+        _run_until_settled(scene, _part_dofs(scene, placed))
+        if _settled(scene, _part_dofs(scene, placed)):
+            break
     mujoco.mj_forward(scene.model, scene.data)
     validate_settled(scene)
     return [

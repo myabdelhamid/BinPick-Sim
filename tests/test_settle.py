@@ -67,3 +67,8 @@ def test_validate_rejects_moving_pile(cfg):
     with pytest.raises(SettleError) as e:
         validate_settled(scene)
     assert e.value.part_id == 5
+
+
+@pytest.mark.parametrize("seed", [1030, 1031])
+def test_slow_piles_get_the_time_they_need(cfg, seed):
+    make_settled_scene(cfg, seed)  # needed up to 2.3 s more than one final pass; raised SettleError before

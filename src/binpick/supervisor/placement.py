@@ -19,13 +19,17 @@ class SlotAllocator:
     seen lying in it; a failure before that leaves it free for the next attempt."""
 
     def __init__(self, n: int):
-        self.n, self._next = n, 0
+        self.n, self._used = n, set()
 
     def peek(self) -> int | None:
-        return self._next if self._next < self.n else None
+        return next((k for k in range(self.n) if k not in self._used), None)
 
     def commit(self) -> None:
-        self._next += 1
+        self._used.add(self.peek())
+
+    def mark_used(self, slot: int) -> None:
+        """Something was seen lying in this slot."""
+        self._used.add(slot)
 
 
 def place_yaw(long_axis_cup: np.ndarray) -> float:
@@ -35,8 +39,7 @@ def place_yaw(long_axis_cup: np.ndarray) -> float:
     return float(-np.arctan2(-a[1], a[0]))
 
 
-def verify_slot(scene: Scene, slot: int) -> tuple[bool, np.ndarray | None]:
-    """Robot-side check from the tray camera: is something sitting centered in `slot`?"""
+def _tray_points(scene: Scene) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     _, depth = render(scene, "tray_cam")
     K = intrinsics(scene, "tray_cam")
     cam = scene.data.cam("tray_cam").xpos
@@ -44,7 +47,21 @@ def verify_slot(scene: Scene, slot: int) -> tuple[bool, np.ndarray | None]:
     v, u = np.mgrid[0:h, 0:w]
     x = cam[0] + (u + 0.5 - K[0, 2]) * depth / K[0, 0]
     y = cam[1] - (v + 0.5 - K[1, 2]) * depth / K[1, 1]
-    z = cam[2] - depth
+    return x, y, cam[2] - depth
+
+
+def occupied_slots(scene: Scene) -> set[int]:
+    """Slots the tray camera sees something lying in."""
+    x, y, z = _tray_points(scene)
+    half = scene.cfg.tray.slot / 2 - VERIFY_INSET
+    return {k for k, c in enumerate(scene.slot_centers)
+            if ((np.abs(x - c[0]) < half) & (np.abs(y - c[1]) < half) & (z > c[2] + VERIFY_MIN_HEIGHT)).sum()
+            >= VERIFY_MIN_PIXELS}
+
+
+def verify_slot(scene: Scene, slot: int) -> tuple[bool, np.ndarray | None]:
+    """Robot-side check from the tray camera: is something sitting centered in `slot`?"""
+    x, y, z = _tray_points(scene)
     c = scene.slot_centers[slot]
     half = scene.cfg.tray.slot / 2 - VERIFY_INSET
     mask = (np.abs(x - c[0]) < half) & (np.abs(y - c[1]) < half) & (z > c[2] + VERIFY_MIN_HEIGHT)

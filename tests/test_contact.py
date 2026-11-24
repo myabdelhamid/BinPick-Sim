@@ -134,3 +134,19 @@ def test_ik_recovers_from_an_awkward_posture(cfg, monkeypatch):
     from binpick.motion.ik import DOWN
     assert sup._ik_min_motion(np.array([0.55, 0.0, 0.35]), DOWN).ok
     assert sup._ik_min_motion(np.array([0.2, 0.5, 0.35]), DOWN, 0.4).ok
+
+
+def test_a_slot_with_a_stray_part_is_not_used(cfg):
+    """A part lying in slot 1 (dropped there earlier) must be seen by the tray camera and the slot skipped."""
+    specs = [PartSpec(i, "box", "plastic", (0.08, 0.06, 0.04), 0.23) for i in range(3)]
+    s = build_scene(cfg, specs)
+    lo, hi = s.bin_inner_bounds()
+    c = (lo + hi) / 2
+    for a, p in zip(s.part_qpos_adr, ([c[0] - 0.1, c[1], lo[2] + 0.02], [c[0] + 0.1, c[1], lo[2] + 0.02],
+                                      s.slot_centers[1] + [0.02, 0.01, 0.02])):
+        s.data.qpos[a:a + 3] = p
+    for _ in range(150):
+        mujoco.mj_step(s.model, s.data)
+    sup = Supervisor(s, np.random.default_rng(0), seed=0)
+    r = [sup.attempt(lambda: rules_targets(observe_bin(s), cfg)) for _ in range(2)]
+    assert [x.outcome for x in r] == ["success"] * 2 and [x.slot for x in r] == [0, 2]

@@ -18,7 +18,7 @@ from binpick.motion.trajectory import IKError, JointTrajectory, cartesian_line, 
 from binpick.planning.types import GraspTarget
 from binpick.sim.scene import PARK_X0, Scene
 from binpick.sim.suction import SuctionCup
-from binpick.supervisor.placement import SlotAllocator, place_yaw, referee_in_slot, verify_slot
+from binpick.supervisor.placement import SlotAllocator, place_yaw, occupied_slots, referee_in_slot, verify_slot
 from binpick.supervisor.records import AttemptRecord
 
 HOVER_ABOVE_RIM = 0.10   # approach lines start at least this far above the bin rim
@@ -171,6 +171,7 @@ class Supervisor:
             def verify():
                 self._wait(cfg.timing.verify_s)
                 rec.verify_ok = verify_slot(scene, rec.slot)[0] and not self.cup.vacuum_present()
+                self._note_occupied()
 
             phase("verify", verify)
         except _Abort as a:
@@ -308,9 +309,15 @@ class Supervisor:
     def _slot_after_failure(self, rec: AttemptRecord) -> None:
         """A failed part seen lying in the pending slot (tray camera) uses that slot up."""
         slot, self._pending_slot = self._pending_slot, None
-        if slot is not None and verify_slot(self.scene, slot)[1] is not None:
-            rec.slot = slot
-            self.slots.commit()
+        if slot is not None:
+            if verify_slot(self.scene, slot)[1] is not None:
+                rec.slot = slot
+            self._note_occupied()
+
+    def _note_occupied(self) -> None:
+        """Part of the tray check after a placement or a drop: never place into a slot something lies in."""
+        for k in occupied_slots(self.scene):
+            self.slots.mark_used(k)
 
     _pending_slot: int | None = None
 

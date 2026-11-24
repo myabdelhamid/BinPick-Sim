@@ -113,8 +113,8 @@ def _obstructed(view: BinView, p: np.ndarray, n: np.ndarray, cfg: Config) -> boo
     return bool(np.any((h > pl.obstacle_height) & (lat < cfg.cup.diameter / 2 + pl.obstacle_clearance)))
 
 
-def _rectangle(view: BinView, label: int) -> tuple[np.ndarray, np.ndarray]:
-    """Center and long axis (world) of the smallest rectangle around the visible surface, seen along its mean
+def _rectangle(view: BinView, label: int) -> tuple[np.ndarray, np.ndarray, float]:
+    """Center, long axis (world) and length of the smallest rectangle around the visible surface, seen along its mean
     normal. Unlike the centroid, it stays right when a corner of the face is hidden."""
     pts, n = view.surface_points(label), view.normals[view.labels == label].mean(axis=0)
     n /= np.linalg.norm(n)
@@ -124,7 +124,7 @@ def _rectangle(view: BinView, label: int) -> tuple[np.ndarray, np.ndarray]:
     try:
         hull = uv[ConvexHull(uv).vertices]
     except QhullError:
-        return p, x
+        return p, x, 0.0
     best = None
     for e in np.roll(hull, -1, axis=0) - hull:
         a = e / np.linalg.norm(e)
@@ -132,9 +132,9 @@ def _rectangle(view: BinView, label: int) -> tuple[np.ndarray, np.ndarray]:
         c = hull @ R.T
         size = np.ptp(c, axis=0)
         if best is None or size.prod() < best[0]:
-            best = (size.prod(), (c.max(axis=0) + c.min(axis=0)) / 2 @ R, R[int(np.argmax(size))])
-    _, mid, ax = best
-    return p + mid[0] * x + mid[1] * y, ax[0] * x + ax[1] * y
+            best = (size.prod(), size, (c.max(axis=0) + c.min(axis=0)) / 2 @ R, R[int(np.argmax(size))])
+    _, size, mid, ax = best
+    return p + mid[0] * x + mid[1] * y, ax[0] * x + ax[1] * y, float(size.max())
 
 
 def _crowding(view: BinView, label: int, cfg: Config) -> float:
@@ -156,10 +156,14 @@ def _crowding(view: BinView, label: int, cfg: Config) -> float:
     return float(np.mean(z[rim] - expect[rim] > cfg.planner.obstacle_height))
 
 
+def longest_part(cfg: Config) -> float:
+    """Longest side any part can have (the cell's part catalogue)."""
+    return max(cfg.parts.box_footprint[1], cfg.parts.cyl_length[1])
+
+
 def max_depth(view: BinView, p: np.ndarray, n: np.ndarray, cfg: Config) -> float:
     """Largest thickness the part can have along n: it cannot reach below the floor, nor exceed the largest part."""
-    longest = max(cfg.parts.box_footprint[1], cfg.parts.cyl_length[1])
-    return float(min(longest, (p[2] - view.lo[2]) / max(n[2], 0.2)))
+    return float(min(longest_part(cfg), (p[2] - view.lo[2]) / max(n[2], 0.2)))
 
 
 def rules_targets(view: BinView, cfg: Config) -> list[GraspTarget]:
@@ -194,7 +198,9 @@ def rules_targets(view: BinView, cfg: Config) -> list[GraspTarget]:
     out: list[tuple[bool, GraspTarget]] = []
     for c in np.unique(lab[ok]):
         sel = np.where(ok & (lab == c))[0]
-        center, axis = _rectangle(view, c)
+        center, axis, length = _rectangle(view, c)
+        if length > longest_part(cfg) + pl.oversize_margin:
+            continue  # larger than any part: two parts the camera cannot tell apart
         seal = 1.0 - (1.0 - s.curve_limit_q) * drop[sel] / limit
         off = np.linalg.norm((pos[sel] - center)[:, :2], axis=1)
         score = (pl.w_height * (pos[sel, 2] - view.lo[2]) / (view.hi[2] - view.lo[2]) + pl.w_seal * seal

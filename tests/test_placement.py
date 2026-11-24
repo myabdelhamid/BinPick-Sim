@@ -55,3 +55,14 @@ def test_place_yaw_aligns_long_axis_with_tray_x(grasp_yaw):
     yaw = place_yaw(long_cup)
     aligned = cup_rotation(DOWN, yaw) @ long_cup
     assert abs(aligned @ [1, 0, 0]) > 0.9999
+
+
+def test_allocator_skips_slots_seen_occupied():
+    al = SlotAllocator(4)
+    al.mark_used(1)
+    assert al.peek() == 0
+    al.commit()
+    assert al.peek() == 2
+    al.mark_used(3)
+    al.commit()
+    assert al.peek() is None

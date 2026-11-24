@@ -40,16 +40,21 @@ def test_flat_box_is_one_centered_surface(cfg):
     assert np.allclose(ctr[:2], c[:2], atol=0.002) and ctr[2] == pytest.approx(c[2] + 0.015, abs=0.001)
 
 
-def test_two_boxes_side_by_side_are_two_surfaces(cfg):
+@pytest.mark.parametrize("gap_mm", [1.0, 1.5, 2.0, 4.0])
+@pytest.mark.parametrize("yaw_deg,off", [(0.0, (0.0, 0.0)), (25.0, (0.08, 0.05))])
+def test_two_boxes_side_by_side_are_two_surfaces(cfg, gap_mm, yaw_deg, off):
     b = [PartSpec(i, "box", "plastic", (0.08, 0.06, 0.03), 0.17) for i in (0, 1)]
     s = build_scene(cfg, b)
     lo, hi = s.bin_inner_bounds()
-    c = (lo + hi) / 2
-    for a, dx in zip(s.part_qpos_adr, (-0.042, 0.042)):  # 4 mm gap
-        s.data.qpos[a:a + 3] = [c[0] + dx, c[1], lo[2] + 0.015]
+    c = (lo + hi) / 2 + [*off, 0]
+    u = np.array([np.cos(np.deg2rad(yaw_deg)), np.sin(np.deg2rad(yaw_deg))])
+    d = 0.04 + gap_mm * 1e-3 / 2
+    for a, sg in zip(s.part_qpos_adr, (-1, 1)):
+        s.data.qpos[a:a + 3] = [*(c[:2] + sg * d * u), lo[2] + 0.015]
+        s.data.qpos[a + 3:a + 7] = quat_axis_angle([0, 0, 1], np.deg2rad(yaw_deg))
     mujoco.mj_forward(s.model, s.data)
     v = observe_bin(s)
-    l0, l1 = label_at(v, c[:2] - [0.042, 0]), label_at(v, c[:2] + [0.042, 0])
+    l0, l1 = label_at(v, c[:2] - d * u), label_at(v, c[:2] + d * u)
     assert l0 > 0 and l1 > 0 and l0 != l1
 
 

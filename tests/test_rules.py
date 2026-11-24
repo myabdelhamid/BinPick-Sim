@@ -124,3 +124,14 @@ def test_free_part_before_a_higher_crowded_one(cfg):
         s.data.qpos[adr:adr + 3] = base + p
     t = targets(s)[0]
     assert t.pos[0] > base[0]  # the lower but free box
+
+
+@pytest.mark.parametrize("gap_mm", [0.0, 1.0, 2.0])
+def test_never_grips_the_seam_between_two_parts(cfg, gap_mm):
+    """Two boxes flush against each other at the same height: whatever the camera can tell apart, the cup must
+    not go on the seam, and no target may be centered between them."""
+    b = [PartSpec(i, "box", "plastic", (0.08, 0.08, 0.04), 0.3) for i in (0, 1)]
+    d = 0.04 + gap_mm * 1e-3 / 2
+    s = two_parts(cfg, *b, [-d, 0, 0.02], [d, 0, 0.02])
+    for t in targets(s):
+        assert abs(t.pos[0] - 0.55) > 0.022 and abs(t.center[0] - 0.55) > 0.03, (t.pos, t.center)

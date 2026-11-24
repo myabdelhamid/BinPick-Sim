@@ -121,6 +121,8 @@ perception:
   wall_margin: 0.003             # ignore cells this close to the walls
   max_slope: 3.0                 # height change per length that counts as a jump (72 deg, as the seal model)
   crease_deg: 40.0               # surface direction change over 4 mm that separates two faces
+  groove_width: 0.004            # gaps up to this wide between two parts ...
+  groove_depth: 0.003            # ... seen at least this deep separate them
   min_surface_mm2: 150.0         # smaller patches are ignored
   empty_mm2: 200.0               # less visible part area than this = empty bin (smallest face: 900 mm2)
 
@@ -138,6 +140,7 @@ planner:
   w_wall: 0.2
   w_center: 0.5                  # penalty per cup radius away from the surface center
   w_crowd: 1.0                   # penalty for the share of the outline with something taller next to it (pinned?)
+  oversize_margin: 0.006         # a surface longer than the longest part plus this is two parts
   crowd_reach: 0.006             # how far around the surface to look for that
   wall_saturation: 0.08          # wall distance beyond this gives no extra score
 
