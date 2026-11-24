@@ -81,3 +81,10 @@ def test_empty_bin_and_thin_part(cfg):
     assert observe_bin(build_scene(cfg, [])).is_empty()
     s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.05, 0.05, 0.02), 0.06))
     assert not observe_bin(s).is_empty()
+
+
+def test_every_labelled_cell_has_a_height_and_a_normal(cfg):
+    for seed in (1000, 1001, 1004):
+        s, _ = make_settled_scene(cfg, seed)
+        v = observe_bin(s)
+        assert np.isfinite(v.z[v.labels > 0]).all() and np.isfinite(v.normals[v.labels > 0]).all(), seed

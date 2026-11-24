@@ -99,7 +99,7 @@ def _edges(z: np.ndarray, normals: np.ndarray, cell: float, max_slope: float, cr
         c[ax], lo_[ax], hi_[ax] = slice(k, -k), slice(None, -2 * k), slice(2 * k, None)
         dot = np.sum(normals[tuple(lo_)] * normals[tuple(hi_)], axis=2)
         e[tuple(c)] |= ~(dot >= crease_cos)  # NaN counts as an edge
-    return e | np.isnan(z)
+    return e | np.isnan(z) | np.isnan(normals).any(axis=2)
 
 
 def observe_bin(scene: Scene) -> BinView:
