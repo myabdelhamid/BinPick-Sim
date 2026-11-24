@@ -78,7 +78,7 @@ Densities (builder's call): plastic 1200 kg/m³, aluminium 2700 kg/m³, steel 78
 
 Suction cup:
 - 44 mm outer diameter. Rigid cylinder collision geom, about 20 mm long, on a short tool body at the Panda flange (`attachment_site`). Tool length is the builder's call.
-- Rated hold: about 3 kg. With a good seal, every part (≤ 1.75 kg) should be lifted and transported. **Only a bad grip makes a part fall.** (Not met for the heaviest curved parts, see §7.)
+- Rated hold: about 3 kg. Parts are within the 1.75 kg payload limit, but some will still fail, even with a good grip (§7), and **every such failure is counted**. (Owner, 2026-11-24; replaces "every part is liftable with a good grip, only a bad grip makes one fall".)
 
 Bin: 400 × 300 × 200 mm inside, 10 mm walls, on a table (height is the builder's call).
 
@@ -95,7 +95,7 @@ MuJoCo's adhesion actuator sticks to anything it touches, so on its own it is un
 - Every step the cup-to-part interface load (weld + lip contact forces) is measured and compared with what the seal can hold, q × 39.0 N (Piab B40.20 datasheet pull at 60 kPa; was an ideal 74 N until 2026-11-24): utilization = tension/F + bending/(F·r·0.5) + shear/(0.5·F), filtered over 20 ms. Pressing (negative tension) counts as extra clamping. Above 1 the grip breaks and cannot re-seal until the vacuum is cycled.
 - A **seal model** decides how much force is available. It is computed every control step from the *ground-truth* cup-to-part geometry in sim, never from the planner's estimate.
 - Seal quality `q ∈ [0, 1]` drops with: angle between the cup axis and the surface normal, curvature or non-planarity of the surface under the cup lip, and the fraction of the cup lip that is off the face (edges, small faces).
-- Available hold force = `q × 39.0 N`. 39 N is 4.0 kg static, so only 1.3× the 3 kg rating. **Open owner decision:** measured at current speeds, centered grip, slot 0 (2026-11-24): flat 100 mm box holds 1.75 kg (83% of the grip), 60 mm tall box 1.75 kg (99%), 60 mm cylinder by its end 1.5 kg, cylinder sides (45, 60, 80 mm) 1.25 kg. Heavier than that is lost in lift or transport.
+- Available hold force = `q × 39.0 N`. 39 N is 4.0 kg static, so only 1.3× the 3 kg rating. **Known limits, not tuned away** (owner, 2026-11-24): measured at current speeds, centered grip, slot 0 (2026-11-24): flat 100 mm box holds 1.75 kg (83% of the grip), 60 mm tall box 1.75 kg (99%), 60 mm cylinder by its end 1.5 kg, cylinder sides (45, 60, 80 mm) 1.25 kg. Heavier than that is lost in lift or transport.
 - Curves follow the B40's 20 mm minimum curve radius. The lip wraps onto the surface; a 40 mm cylinder is the thinnest that seals. **Assumption:** `q` falls linearly to 0.75 at that radius (the sheet gives no force there). Tilt limits are unchanged from M2 because the sheet gives no tilt data. The modelled lip stays 44 mm (B40: 43 mm lip, 46 mm body).
 - The part detaches when the required force exceeds what is available. Required force = weight + inertial load during lift and transport + peel from an off-center grip (moment arm from cup center to the part's center of mass).
 - Failure reasons are logged from the model: `no_seal`, `seal_lost_lift`, `seal_lost_transport`, `misplaced`, `ik_fail`, `collision`, `no_candidate`.
@@ -107,7 +107,12 @@ MuJoCo's adhesion actuator sticks to anything it touches, so on its own it is un
 
 Sim ground truth is used only by the seal physics and by the benchmark referee that scores success.
 
-This is what makes good grips succeed and bad grips fail, as the owner requires. Exact formulas and thresholds are designed in M2 and calibrated in M4 against simple physical sanity cases (flat top center → hold; 30° tilt → fail; cylinder side below 40 mm → fail (was 40 mm, changed with the B40 cup)). Calibration is never done against benchmark results.
+This is what separates good grips from bad ones. Exact formulas and thresholds are designed in M2 and checked against simple physical sanity cases (flat top center → hold; 30° tilt → fail; cylinder side below 40 mm → fail (was 40 mm, changed with the B40 cup)). They are never adjusted to benchmark results.
+
+**Test freeze (owner, 2026-11-24).** From commit 6bba2f3 on, parts (sizes, materials, 1.75 kg limit), cup and contact physics are frozen. Only bug fixes may change them, and each is reported with before and after results. Depth-camera noise (M3/M4, in the original brief) is still to be added. Improvements go into the robot: grasp choice, avoiding pinned parts, slowing for sensed heavy loads, shaking. Seeds 1–25 are not run before M5. The final report must state:
+- how 1.75 kg was chosen: after seeing heavier parts drop, and justified afterwards (Schmalz safety factors 1.5 and 2.0 give 2.1 and 1.6 kg for a straight vertical lift at 2.5 m/s²; sideways transport lowers both). It redraws about 4% of parts compared with 2.5 kg;
+- the mass-by-shape limits above;
+- that no manufacturer part weights were available. Ask the founder for them before M5.
 
 ## 8. Architecture
 
