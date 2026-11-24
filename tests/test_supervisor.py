@@ -82,6 +82,16 @@ def test_thin_cylinder_is_picked_from_its_side(cfg):
     assert r.outcome == "success", r
 
 
+@pytest.mark.parametrize("slot", [0, 4, 15, 17, 19])  # tray corners and the far row
+def test_part_is_placed_in_far_slots(cfg, slot):
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.09, 0.06, 0.05), 0.32))
+    sup = Supervisor(s, np.random.default_rng(0), seed=0)
+    for _ in range(slot):
+        sup.slots.commit()
+    r = sup.attempt(oracle_targets(s)[0])
+    assert r.outcome == "success" and r.slot == slot, r
+
+
 def test_unreachable_target_is_not_an_attempt(cfg):
     box = PartSpec(0, "box", "plastic", (0.09, 0.06, 0.03), 0.2)
     s = single_part_scene(cfg, box)

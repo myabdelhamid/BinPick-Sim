@@ -72,13 +72,13 @@ Parts (all ranges uniform, sampled per part):
 - **Boxes (15):** footprint 45–110 mm on each side, height 20–70 mm.
 - **Cylinders (5):** diameter 40–80 mm, length 40–110 mm.
 - **Material** per part: 60 % plastic, 30 % aluminium, 10 % steel.
-- **Mass**: every part weighs between about 50 g and 2.5 kg.
+- **Mass**: every part weighs between about 50 g and 1.75 kg (owner, 2026-11-24; was 2.5 kg, lowered for the 39 N cup).
 
-Densities (builder's call): plastic 1200 kg/m³, aluminium 2700 kg/m³, steel 7850 kg/m³. Mass = density × volume. **Enforcing the 2.5 kg cap (builder's call):** if a sampled part is over 2.5 kg, its dimensions are resampled with the same material until it fits. This keeps densities physical. Steel parts therefore skew small, which is realistic. Parts below 50 g are resampled the same way.
+Densities (builder's call): plastic 1200 kg/m³, aluminium 2700 kg/m³, steel 7850 kg/m³. Mass = density × volume. **Enforcing the 1.75 kg cap (builder's call):** if a sampled part is over 1.75 kg, its dimensions are resampled with the same material until it fits. This keeps densities physical. Steel parts therefore skew small, which is realistic. Parts below 50 g are resampled the same way.
 
 Suction cup:
 - 44 mm outer diameter. Rigid cylinder collision geom, about 20 mm long, on a short tool body at the Panda flange (`attachment_site`). Tool length is the builder's call.
-- Rated hold: about 3 kg. With a good seal, every part (≤ 2.5 kg) can be lifted and transported. **Only a bad grip makes a part fall.**
+- Rated hold: about 3 kg. With a good seal, every part (≤ 1.75 kg) should be lifted and transported. **Only a bad grip makes a part fall.** (Not met for the heaviest curved parts, see §7.)
 
 Bin: 400 × 300 × 200 mm inside, 10 mm walls, on a table (height is the builder's call).
 
@@ -95,7 +95,7 @@ MuJoCo's adhesion actuator sticks to anything it touches, so on its own it is un
 - Every step the cup-to-part interface load (weld + lip contact forces) is measured and compared with what the seal can hold, q × 39.0 N (Piab B40.20 datasheet pull at 60 kPa; was an ideal 74 N until 2026-11-24): utilization = tension/F + bending/(F·r·0.5) + shear/(0.5·F), filtered over 20 ms. Pressing (negative tension) counts as extra clamping. Above 1 the grip breaks and cannot re-seal until the vacuum is cycled.
 - A **seal model** decides how much force is available. It is computed every control step from the *ground-truth* cup-to-part geometry in sim, never from the planner's estimate.
 - Seal quality `q ∈ [0, 1]` drops with: angle between the cup axis and the surface normal, curvature or non-planarity of the surface under the cup lip, and the fraction of the cup lip that is off the face (edges, small faces).
-- Available hold force = `q × 39.0 N`. 39 N is 4.0 kg static, so only 1.3× the 3 kg rating. **Open owner decision:** a perfect centered grip holds 2.0 kg at current speeds but loses 2.25 and 2.5 kg in transport, so "every part is liftable" does not hold above about 2 kg.
+- Available hold force = `q × 39.0 N`. 39 N is 4.0 kg static, so only 1.3× the 3 kg rating. **Open owner decision:** measured at current speeds, centered grip, slot 0 (2026-11-24): flat 100 mm box holds 1.75 kg (83% of the grip), 60 mm tall box 1.75 kg (99%), 60 mm cylinder by its end 1.5 kg, cylinder sides (45, 60, 80 mm) 1.25 kg. Heavier than that is lost in lift or transport.
 - Curves follow the B40's 20 mm minimum curve radius. The lip wraps onto the surface; a 40 mm cylinder is the thinnest that seals. **Assumption:** `q` falls linearly to 0.75 at that radius (the sheet gives no force there). Tilt limits are unchanged from M2 because the sheet gives no tilt data. The modelled lip stays 44 mm (B40: 43 mm lip, 46 mm body).
 - The part detaches when the required force exceeds what is available. Required force = weight + inertial load during lift and transport + peel from an off-center grip (moment arm from cup center to the part's center of mass).
 - Failure reasons are logged from the model: `no_seal`, `seal_lost_lift`, `seal_lost_transport`, `misplaced`, `ik_fail`, `collision`, `no_candidate`.
@@ -153,7 +153,7 @@ Deliverables:
 
 M1 tests (pytest, headless):
 - Config loads; counts are 15 boxes and 5 cylinders.
-- Sampler: all dimensions within range, every mass in [0.05, 2.5] kg, materials drawn from the three, same seed gives identical specs, different seeds give different specs.
+- Sampler: all dimensions within range, every mass in [0.05, 1.75] kg, materials drawn from the three, same seed gives identical specs, different seeds give different specs.
 - Cup geom diameter is 44 mm. The adhesion actuator exists.
 - Tray has 20 slots on a 120 mm pitch.
 - Reachability IK test from §6 passes (uses mink).

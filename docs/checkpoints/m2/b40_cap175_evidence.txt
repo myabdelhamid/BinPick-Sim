@@ -1,0 +1,21 @@
+# B40 cup, 1.75 kg cap, tray at y=0.45 (2026-11-24).
+# The cap redraws some parts, so these piles differ from the earlier runs: do not compare success counts directly.
+# Carrying limit by shape (mass kg, result, peak grip utilization), centered grip, slot 0; then known-pose oracle seeds 1000-1009
+cyl45 L100 side [(0.75, 'ok', 0.52), (1.0, 'ok', 0.69), (1.25, 'ok', 0.87), (1.5, 'seal_lost_transport', 1.0), (1.75, 'seal_lost_lift', 0.95)]
+cyl60 L80 side [(0.75, 'ok', 0.53), (1.0, 'ok', 0.71), (1.25, 'ok', 0.89), (1.5, 'seal_lost_transport', 1.0), (1.75, 'seal_lost_lift', 0.96)]
+cyl80 L80 side [(0.75, 'ok', 0.55), (1.0, 'ok', 0.74), (1.25, 'ok', 0.93), (1.5, 'seal_lost_lift', 0.98), (1.75, 'seal_lost_lift', 0.94)]
+cyl60 L79 end [(0.75, 'ok', 0.76), (1.0, 'ok', 0.8), (1.25, 'ok', 0.8), (1.5, 'ok', 0.95), (1.75, 'seal_lost_transport', 1.0)]
+box60x60x62 [(0.75, 'ok', 0.65), (1.0, 'ok', 0.67), (1.25, 'ok', 0.71), (1.5, 'ok', 0.85), (1.75, 'ok', 0.99)]
+box100x100x25 [(0.75, 'ok', 0.49), (1.0, 'ok', 0.55), (1.25, 'ok', 0.62), (1.5, 'ok', 0.68), (1.75, 'ok', 0.83)]
+1002 2 no_seal (sensed: no_seal) box [0.075 0.101 0.054] 0.49
+1002 3 collision (sensed: seal_lost_lift) box [0.075 0.101 0.054] 0.49
+1004 1 seal_lost_lift (sensed: seal_lost_lift) cylinder [0.078 0.086] 1.13
+1004 3 seal_lost_lift (sensed: seal_lost_lift) cylinder [0.078 0.086] 1.13
+1005 3 seal_lost_transport (sensed: seal_lost_transport) cylinder [0.046 0.081] 1.07
+1006 1 collision (sensed: seal_lost_lift) box [0.103 0.081 0.069] 0.68
+1006 3 collision (sensed: seal_lost_lift) box [0.103 0.081 0.069] 0.68
+1007 2 collision (sensed: seal_lost_lift) cylinder [0.067 0.097] 0.41
+1007 3 collision (sensed: seal_lost_lift) cylinder [0.067 0.097] 0.41
+attempts 25 success 16 mean 8.24 max 8.65
+phase means {'capture': np.float64(0.3), 'plan': np.float64(0.2), 'approach': np.float64(1.39), 'grip': np.float64(0.15), 'lift': np.float64(0.91), 'transport': np.float64(1.89), 'place': np.float64(1.14), 'release': np.float64(0.25), 'retreat': np.float64(1.82), 'verify': np.float64(0.2)}
+failure reasons {'no_seal': 1, 'collision': 5, 'seal_lost_lift': 2, 'seal_lost_transport': 1}

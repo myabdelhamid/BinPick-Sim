@@ -1,6 +1,8 @@
 import numpy as np
+import pytest
 
-from binpick.motion.ik import solve_cup_down
+from binpick.motion.ik import DOWN, solve_cup_down, solve_cup_pose
+from binpick.sim.scene import build_scene
 
 
 def reach_targets(scene):
@@ -99,3 +101,13 @@ def test_ik_is_fast(scene):
     for t in targets:
         solve_cup_down(scene, t)
     assert (time.perf_counter() - t0) / len(targets) < 0.025
+
+
+@pytest.mark.parametrize("depth", [0.02, 0.06, 0.11])  # thinnest to longest part hanging under the cup
+def test_every_slot_is_reachable_at_transport_height(cfg, depth):
+    s = build_scene(cfg, [])
+    rim = s.bin_inner_bounds()[1][2]
+    for n, c in enumerate(s.slot_centers):
+        z = max(rim + depth + cfg.motion.clear_above_rim, c[2] + cfg.motion.place_clearance + depth + cfg.motion.pregrasp_dist)
+        for yaw in (0.0, np.pi / 2):
+            assert solve_cup_pose(s, np.r_[c[:2], z], DOWN, yaw).ok, (n, depth, yaw)

@@ -9,7 +9,7 @@ parts:
   cyl_diameter: [0.040, 0.080]
   cyl_length: [0.040, 0.110]
   mass_min: 0.05
-  mass_max: 2.5
+  mass_max: 1.75                 # owner 2026-11-24: heaviest part the 39 N cup carries at current speeds with margin
   materials:
     plastic:   {prob: 0.6, density: 1200, friction: 0.6, rgba: [0.20, 0.45, 0.85, 1.0]}
     aluminium: {prob: 0.3, density: 2700, friction: 0.5, rgba: [0.75, 0.76, 0.78, 1.0]}
@@ -55,7 +55,7 @@ settle:
 layout:
   robot_base_pos: [0.0, 0.0, 0.0]
   bin_center_xy: [0.55, 0.0]
-  tray_center_xy: [0.0, 0.55]
+  tray_center_xy: [0.0, 0.45]      # far row reachable at transport height (0.43-0.47 works)
   table_height: 0.0              # bin outer bottom / tray base z
 
 sim:
@@ -69,7 +69,7 @@ motion:
   max_joint_acc: 8.0             # rad/s^2, empty cup
   max_joint_acc_loaded: 3.0      # rad/s^2, carrying a part (keeps inertial peel/shear on the cup low)
   max_cart_vel: 0.8              # m/s, straight-line cup moves
-  max_cart_acc: 2.5              # m/s^2, carrying a part (lines are along the cup axis: 2.5 kg * (g + 2.5) = 31 N, 79% of the 39 N seal)
+  max_cart_acc: 2.5              # m/s^2, carrying a part (lines are along the cup axis: 1.75 kg * (g + 2.5) = 22 N, 55% of a perfect 39 N seal)
   max_cart_acc_empty: 4.0        # m/s^2, empty cup
   cart_step: 0.01                # IK waypoint spacing on straight lines
   pregrasp_dist: 0.12            # stand-off along the face normal before approach
