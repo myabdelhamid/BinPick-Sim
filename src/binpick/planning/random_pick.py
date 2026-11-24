@@ -1,28 +1,37 @@
-"""Baseline: random visible points on parts. No filters, no scoring."""
+"""Baseline: random visible points on parts. No filters, no scoring. Only the choice of point is random: how the
+part is approached and placed is the same as for the rules planner."""
 
 from __future__ import annotations
 
 import numpy as np
+from scipy import ndimage
 
 from binpick.config import Config
 from binpick.perception.view import BinView
-from binpick.planning.rules import max_depth
+from binpick.planning.rules import max_depth, surface_rectangle
 from binpick.planning.types import GraspTarget
 
 
 def random_targets(view: BinView, cfg: Config, rng: np.random.Generator, n: int = 50) -> list[GraspTarget]:
     """n random part points in random order; the cup approaches along the local surface normal. The order is
     the only preference: the supervisor takes the first one the arm can reach."""
-    ij = np.argwhere(view.part_mask & np.isfinite(view.normals).all(axis=2))
+    ij = np.argwhere(view.part_mask & np.isfinite(view.z))
     if view.is_empty() or len(ij) == 0:
         return []
+    # an edge cell has no surface of its own: it belongs to the nearest one
+    near = ndimage.distance_transform_edt(view.labels == 0, return_distances=False, return_indices=True)
+    faces: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     out = []
     for c in ij[rng.integers(0, len(ij), n)]:
         p = np.r_[view.xy(c), view.z[tuple(c)]]
-        normal = view.normals[tuple(c)]
-        a = rng.uniform(0, 2 * np.pi)
-        ref = np.array([np.cos(a), np.sin(a), 0.0])
-        axis = ref - (ref @ normal) * normal
+        own = tuple(near[:, c[0], c[1]])
+        lab = int(view.labels[own])
+        if lab == 0:
+            return []  # nothing but slivers in view
+        if lab not in faces:
+            faces[lab] = surface_rectangle(view, lab)[:2]
+        center, axis = faces[lab]
+        normal = view.normals[own]
         out.append(GraspTarget(None, p, normal, float(np.degrees(np.arccos(normal[2]))), max_depth(view, p, normal, cfg),
-                               axis / np.linalg.norm(axis)))
+                               axis, center))
     return out

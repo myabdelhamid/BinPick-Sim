@@ -11,6 +11,8 @@ The rest are scored; flat surfaces come before curved ones.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 from scipy import ndimage
 from scipy.spatial import ConvexHull, QhullError
@@ -113,7 +115,7 @@ def _obstructed(view: BinView, p: np.ndarray, n: np.ndarray, cfg: Config) -> boo
     return bool(np.any((h > pl.obstacle_height) & (lat < cfg.cup.diameter / 2 + pl.obstacle_clearance)))
 
 
-def _rectangle(view: BinView, label: int) -> tuple[np.ndarray, np.ndarray, float]:
+def surface_rectangle(view: BinView, label: int) -> tuple[np.ndarray, np.ndarray, float]:
     """Center, long axis (world) and length of the smallest rectangle around the visible surface, seen along its mean
     normal. Unlike the centroid, it stays right when a corner of the face is hidden."""
     pts, n = view.surface_points(label), view.normals[view.labels == label].mean(axis=0)
@@ -166,7 +168,8 @@ def max_depth(view: BinView, p: np.ndarray, n: np.ndarray, cfg: Config) -> float
     return float(min(longest_part(cfg), (p[2] - view.lo[2]) / max(n[2], 0.2)))
 
 
-def rules_targets(view: BinView, cfg: Config) -> list[GraspTarget]:
+def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = ()) -> list[GraspTarget]:
+    """Targets, best first. Points within `run.avoid_radius` of one in `avoid` (it just failed) are left out."""
     pl, s, r = cfg.planner, cfg.suction, cfg.cup.diameter / 2
     k = max(1, int(round(pl.candidate_step / view.cell)))
     grid = np.zeros(view.z.shape, bool)
@@ -194,11 +197,13 @@ def rules_targets(view: BinView, cfg: Config) -> list[GraspTarget]:
     limit = s.curve_radius_min * (1 - np.cos(lip_radius(cfg) / s.curve_radius_min))
     wall = _wall_distance(view, pos, n)
     ok = (tilt <= pl.max_tilt_deg) & (drop <= limit) & (np.ptp(lip, axis=1) <= s.travel) & (wall >= r + pl.wall_clearance)
+    for f in avoid:
+        ok &= np.linalg.norm(pos - f, axis=1) > cfg.run.avoid_radius
 
     out: list[tuple[bool, GraspTarget]] = []
     for c in np.unique(lab[ok]):
         sel = np.where(ok & (lab == c))[0]
-        center, axis, length = _rectangle(view, c)
+        center, axis, length = surface_rectangle(view, c)
         if length > longest_part(cfg) + pl.oversize_margin:
             continue  # larger than any part: two parts the camera cannot tell apart
         seal = 1.0 - (1.0 - s.curve_limit_q) * drop[sel] / limit

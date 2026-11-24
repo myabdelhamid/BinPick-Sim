@@ -75,10 +75,37 @@ def test_a_spot_that_just_failed_is_not_tried_again_at_once(cfg, monkeypatch):
     assert sorted(x.target_part for x in r.records) == [0, 1, 2]
 
 
-def test_failures_do_not_reset_the_shake_count(cfg, monkeypatch):
+def test_failing_attempts_run_to_the_attempt_limit(cfg, monkeypatch):
+    """Spec: a run ends with no_candidate only if nothing can be picked after 3 shakes. Failing picks are picks."""
     from binpick.supervisor import machine
 
-    s = loose_parts_scene(cfg)
     monkeypatch.setattr(machine.SuctionCup, "sealed", lambda self: False)
-    r = run_bin(s, "rules", seed=0)
-    assert r.stop == "no_candidate" and r.shakes == 3 and len(r.records) < 40
+    r = run_bin(loose_parts_scene(cfg), "rules", seed=0, max_attempts=8)
+    assert r.stop == "attempt_limit" and len(r.records) == 8
+
+
+def test_another_spot_on_the_same_surface_is_tried_before_shaking(cfg, monkeypatch):
+    from binpick.supervisor import machine
+
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.11, 0.11, 0.03), 0.4))
+    spots = []
+    monkeypatch.setattr(machine.SuctionCup, "sealed", lambda self: False)
+    real = machine.Supervisor.attempt
+
+    def attempt(self, targets):
+        rec = real(self, targets)
+        if rec is not None:
+            spots.append(self.last_target.pos)
+        return rec
+
+    monkeypatch.setattr(machine.Supervisor, "attempt", attempt)
+    r = run_bin(s, "rules", seed=0, max_attempts=2)
+    assert r.shakes == 0 and np.linalg.norm(spots[1] - spots[0]) > cfg.run.avoid_radius
+
+
+def test_summary_reports_all_cycle_times(cfg):
+    r = run_bin(loose_parts_scene(cfg), "rules", seed=0)
+    s = r.summary()
+    assert s["cycle_mean_all_s"] == pytest.approx(np.mean([x.cycle_time_s for x in r.records]))
+    assert s["sim_time_per_placed_s"] == pytest.approx(r.sim_time_s / r.placed)
+    assert s["over_8s"] == sum(x.cycle_time_s > 8.0 for x in r.records if x.outcome == "success")

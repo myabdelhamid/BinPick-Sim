@@ -111,3 +111,14 @@ def test_every_slot_is_reachable_at_transport_height(cfg, depth):
         z = max(rim + depth + cfg.motion.clear_above_rim, c[2] + cfg.motion.place_clearance + depth + cfg.motion.pregrasp_dist)
         for yaw in (0.0, np.pi / 2):
             assert solve_cup_pose(s, np.r_[c[:2], z], DOWN, yaw).ok, (n, depth, yaw)
+
+
+def test_ik_solver_failure_is_an_unreachable_pose_not_a_crash(cfg, monkeypatch):
+    import mink
+
+    def boom(*a, **k):
+        raise mink.NoSolutionFound("daqp")
+
+    s = build_scene(cfg, [])
+    monkeypatch.setattr(mink, "solve_ik", boom)
+    assert not solve_cup_pose(s, np.array([0.5, 0.0, 0.3]), DOWN, 0.0).ok

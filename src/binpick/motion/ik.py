@@ -88,7 +88,10 @@ def _solve(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarray, yaw: 
         pos_err, rot_err = float(np.linalg.norm(err[:3])), float(np.linalg.norm(err[3:]))
         if pos_err < pos_tol and rot_err < rot_tol:
             break
-        vel = mink.solve_ik(cfg, [task, posture], dt, solver="daqp", damping=1e-3, limits=limits)
+        try:
+            vel = mink.solve_ik(cfg, [task, posture], dt, solver="daqp", damping=1e-3, limits=limits)
+        except mink.NoSolutionFound:
+            break  # reported as not reached
         cfg.integrate_inplace(vel, dt)
     err = task.compute_error(cfg)
     pos_err, rot_err = float(np.linalg.norm(err[:3])), float(np.linalg.norm(err[3:]))

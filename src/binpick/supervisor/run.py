@@ -45,6 +45,9 @@ class BinResult:
                 "placed": self.placed, "left_in_bin": self.left_in_bin, "lost": self.lost, "misplaced": self.misplaced,
                 "shakes": self.shakes, "attempts": len(self.records), "successes": len(ok), "fail_reasons": reasons,
                 "cycle_mean_s": float(np.mean(ct)) if ct else None, "cycle_max_s": float(np.max(ct)) if ct else None,
+                "over_8s": sum(c > 8.0 for c in ct),
+                "cycle_mean_all_s": float(np.mean([r.cycle_time_s for r in self.records])) if self.records else None,
+                "sim_time_per_placed_s": self.sim_time_s / self.placed if self.placed else None,
                 "sim_time_s": self.sim_time_s}
 
 
@@ -68,8 +71,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             return []
         if planner == "random":
             return random_targets(view, cfg, pick_rng)
-        return [t for t in rules_targets(view, cfg)
-                if all(np.linalg.norm(t.pos - f) > cfg.run.avoid_radius for f in failed)]
+        return rules_targets(view, cfg, avoid=failed)
 
     t0, shakes, in_a_row = scene.data.time, 0, 0
     while True:
@@ -80,8 +82,8 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             stop = "tray_full"
             break
         if sup.attempt(propose) is not None:
+            in_a_row = 0
             if sup.last_success_sensed:
-                in_a_row = 0
                 failed.clear()
             else:
                 failed.append(sup.last_target.pos)
