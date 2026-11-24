@@ -47,6 +47,7 @@ class Supervisor:
         self._phase = "idle"
         self.last_target: GraspTarget | None = None
         self.last_success_sensed = False  # the robot's own verdict on the last attempt (not the referee's)
+        self.set_down_felt = False  # contact was felt on the last set-down
         self._watch_seal = False
         self._low_polls = 0
         self._k = 0
@@ -302,7 +303,7 @@ class Supervisor:
         """Lower the part until it touches the tray (the camera cannot see its thickness)."""
         m, parts = self.scene.cfg.motion, self.scene.cfg.parts
         z_end = tray_z + min(parts.box_height[0], parts.cyl_diameter[0]) - m.probe_past
-        ok, _ = self._probe(np.r_[xy, z_top], np.r_[xy, z_end], DOWN, self._place_yaw, m.probe_speed, loaded=True)
+        ok, self.set_down_felt = self._probe(np.r_[xy, z_top], np.r_[xy, z_end], DOWN, self._place_yaw, m.probe_speed, loaded=True)
         if not ok:
             raise _Abort("seal_lost_transport")
 

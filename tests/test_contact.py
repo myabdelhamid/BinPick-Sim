@@ -150,3 +150,27 @@ def test_a_slot_with_a_stray_part_is_not_used(cfg):
     sup = Supervisor(s, np.random.default_rng(0), seed=0)
     r = [sup.attempt(lambda: rules_targets(observe_bin(s), cfg)) for _ in range(2)]
     assert [x.outcome for x in r] == ["success"] * 2 and [x.slot for x in r] == [0, 2]
+
+
+@pytest.mark.parametrize("bound", [0.04, 0.11])  # exact thickness (part lay on the floor) and the loosest bound
+@pytest.mark.parametrize("kg", [0.15, 1.2])
+def test_set_down_contact_is_felt_not_missed(cfg, kg, bound):
+    """The probe must feel the tray (not be ended by the seal breaking), within 20 ms and at low speed."""
+    s = _settled(cfg, PartSpec(0, "box", "steel", (0.09, 0.07, 0.04), kg))
+    (t,) = oracle_targets(s)
+    t = GraspTarget(None, t.pos, t.normal, t.tilt_deg, bound, t.long_axis)
+    tray, b, log = s.model.body("tray").id, s.part_body_ids[0], []
+
+    def obs(sc, ph):
+        if ph == "place":
+            hit = any({sc.model.geom_bodyid[c.geom1], sc.model.geom_bodyid[c.geom2]} == {tray, b} for c in sc.data.contact[:sc.data.ncon])
+            log.append((sc.data.time, hit, sc.data.xpos[b][2]))
+
+    sup = Supervisor(s, np.random.default_rng(0), seed=0, observer=obs)
+    r = sup.attempt(t)
+    assert r.outcome == "success" and sup.set_down_felt
+    first = next(i for i, x in enumerate(log) if x[1])
+    stop = log[first][0] + 0.021 + cfg.motion.settle_after_move_s
+    assert log[-1][0] < stop  # the place phase ended (touch detected, then came to rest) right after first contact
+    v = (log[first - 10][2] - log[first - 1][2]) / (log[first - 1][0] - log[first - 10][0])
+    assert 0.03 < v < 0.12  # m/s on landing

@@ -78,7 +78,7 @@ motion:
   approach_overtravel: 0.002     # go this far past the surface (cup margin absorbs it)
   lift_dist: 0.06                # first lift along the face normal
   clear_above_rim: 0.05          # transport height margin above rim + part height
-  place_clearance: 0.005         # part's lowest point above tray surface at release
+  place_clearance: 0.014         # start feeling for the tray this far above where the part could touch (the first 0.12 s of the probe is blind)
   retreat_dist: 0.10
   touch_start: 0.012             # slow down this far before the surface and feel for contact
   touch_past: 0.006              # give up this far past where the surface should be
