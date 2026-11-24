@@ -25,6 +25,7 @@ HOVER_ABOVE_RIM = 0.10   # approach lines start at least this far above the bin 
 PROBE_BLANK_S = 0.12     # contact probing ignores the start of the move (the arm is still speeding up)
 PROBE_WINDOW_S = 0.02    # lag is compared with its mean 20-40 ms earlier
 SHAKE_RAMP_S = 0.3
+ARM_HIT_MIN_N = 50.0     # scoring: arm or tool hitting the cell harder than this is a collision
 SEAL_POLL_STEPS = 10     # read the vacuum sensor every 10 physics steps (20 ms)
 
 Observer = Callable[[Scene, str], None]
@@ -54,6 +55,13 @@ class Supervisor:
         r = solve_cup_pose(scene, np.asarray(cfg.layout.view_pos), DOWN, 0.0)
         assert r.ok, "layout.view_pos is unreachable"
         self._view_q = r.q
+        m = scene.model
+        names = [m.body(b).name for b in m.geom_bodyid]
+        self._is_arm_geom = np.array([n.startswith("panda/") for n in names])
+        self._is_part_geom = np.array([n.startswith("part_") for n in names])
+        self._cup_geom_id = m.geom(scene.cup_geom).id
+        self._held_part: int | None = None
+        self._arm_hit_n = 0.0
         self._clear = True  # arm out of both cameras' view (parked at start)
         self._tip = scene.model.site(scene.cup_site).id
         self._dofs = [int(scene.model.joint(j).dofadr[0]) for j in scene.arm_joint_names]
@@ -64,6 +72,7 @@ class Supervisor:
 
     def _on_step(self, scene: Scene) -> bool:
         self.cup.update()
+        self._log_truth()
         if self.observer is not None:
             self.observer(scene, self._phase)
         self._k += 1
@@ -154,6 +163,7 @@ class Supervisor:
                             est_seal=target.seal)
         self.records.append(rec)
         self.last_target, self._clear = target, False
+        self._held_part, self._arm_hit_n = None, 0.0
         try:
             phase("approach", lambda: (self._run(joint_move(self._q(), plan["hover_q"], cfg.motion)),
                                        self._run(plan["approach"]),
@@ -216,7 +226,6 @@ class Supervisor:
         def grip():
             self.cup.on()
             self._wait(cfg.timing.vacuum_build_s)
-            rec.gripped_part = self.cup.part_index  # ground truth, for the record only
             if not self.cup.sealed():
                 raise _Abort("no_seal")
 
@@ -374,21 +383,40 @@ class Supervisor:
         self._phase = "idle"
 
     # ---- scoring (ground truth) ------------------------------------------------------------
+    def _log_truth(self) -> None:
+        """What really happens, for the attempt record only (never read by the robot)."""
+        m, d = self.scene.model, self.scene.data
+        if self.cup.holding:
+            self._held_part = self.cup.part_index
+        g = d.contact.geom[:d.ncon]
+        arm, part = self._is_arm_geom[g], self._is_part_geom[g]
+        cup = g == self._cup_geom_id
+        # arm or tool against bin, tray or floor; or anything but the cup lip against a part
+        hits = arm.any(axis=1) & ~arm.all(axis=1) & ~(cup.any(axis=1) & part.any(axis=1))
+        f = np.zeros(6)
+        for k in np.flatnonzero(hits):
+            mujoco.mj_contactForce(m, d, int(k), f)
+            self._arm_hit_n = max(self._arm_hit_n, float(f[0]))
+
     def _score(self, rec: AttemptRecord) -> None:
         scene, d = self.scene, self.scene.data
         mujoco.mj_forward(scene.model, d)
-        part = rec.gripped_part
+        rec.gripped_part = part = self._held_part
+        rec.arm_hit_n = self._arm_hit_n if self._arm_hit_n > ARM_HIT_MIN_N else 0.0
         rec.referee_ok = part is not None and rec.slot is not None and referee_in_slot(scene, part, rec.slot)
-        if rec.referee_ok:
+        rec.detected = rec.verify_ok == rec.referee_ok
+        if rec.arm_hit_n:  # spec: a collision during motion is a failed attempt, wherever the part ends up
+            rec.outcome, rec.reason = "fail", "collision"
+        elif rec.referee_ok:
             rec.outcome, rec.reason = "success", ""
-            rec.detected = rec.verify_ok
         else:
             rec.outcome = "fail"
-            if not rec.reason:
-                rec.reason = "misplaced"
+            if not rec.reason or rec.slot is not None:
+                rec.reason = "misplaced"  # it lies in its slot area, off center
+            elif rec.reason == "no_seal" and part is not None:
+                rec.reason = "seal_lost_grip"  # sealed, then broke before the vacuum was confirmed
             elif rec.reason.startswith("seal_lost") and self.cup.break_cause == "external_contact":
                 rec.reason = "collision"  # root cause: torn off by contact with the bin or another part
-                rec.detected = not rec.verify_ok
         lo, hi = scene.bin_inner_bounds()
         for i, b in enumerate(scene.part_body_ids):
             if i in self.lost:

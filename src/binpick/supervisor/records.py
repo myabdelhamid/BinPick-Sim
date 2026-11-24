@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 PHASES = ("capture", "plan", "approach", "grip", "lift", "transport", "place", "release", "retreat", "verify")
-REASONS = ("no_seal", "seal_lost_lift", "seal_lost_transport", "misplaced", "ik_fail", "collision", "tray_full",
+REASONS = ("no_seal", "seal_lost_grip", "seal_lost_lift", "seal_lost_transport", "misplaced", "ik_fail", "collision", "tray_full",
            "no_candidate")
 
 
@@ -25,6 +25,7 @@ class AttemptRecord:
     verify_ok: bool = False              # supervisor's tray-camera verdict
     referee_ok: bool = False             # ground-truth verdict (scoring)
     lost_parts: list[int] = field(default_factory=list)
+    arm_hit_n: float = 0.0               # hardest contact of arm/tool with the cell (ground truth), N; 0 = none
     cycle_time_s: float = 0.0
     tilt_deg: float = 0.0
     est_seal: float = 1.0                # planner's seal estimate
@@ -33,7 +34,7 @@ class AttemptRecord:
 
 def write_csv(records: list[AttemptRecord], path: str | Path) -> None:
     cols = ["seed", "attempt", "target_part", "gripped_part", "slot", "outcome", "reason", "sensed", "detected",
-            "verify_ok", "referee_ok", "lost_parts", "cycle_time_s", "tilt_deg", "est_seal"] + [f"t_{p}" for p in PHASES]
+            "verify_ok", "referee_ok", "lost_parts", "cycle_time_s", "tilt_deg", "est_seal", "arm_hit_n"] + [f"t_{p}" for p in PHASES]
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
@@ -42,5 +43,5 @@ def write_csv(records: list[AttemptRecord], path: str | Path) -> None:
                         "" if r.slot is None else r.slot, r.outcome, r.reason, r.sensed, int(r.detected),
                         int(r.verify_ok),
                         int(r.referee_ok), ";".join(map(str, r.lost_parts)), f"{r.cycle_time_s:.3f}",
-                        f"{r.tilt_deg:.1f}", f"{r.est_seal:.3f}"]
+                        f"{r.tilt_deg:.1f}", f"{r.est_seal:.3f}", f"{r.arm_hit_n:.0f}"]
                        + [f"{r.phase_times.get(p, 0.0):.3f}" for p in PHASES])
