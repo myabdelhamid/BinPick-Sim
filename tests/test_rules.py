@@ -270,3 +270,27 @@ def test_no_lift_direction_away_from_neighbours(cfg):
     a, b = (PartSpec(k, "box", "plastic", (0.08, 0.08, h), 0.3) for k, h in ((0, 0.05), (1, 0.03)))
     s = two_parts(cfg, a, b, [0, 0, 0.025], [0, 0.0805, 0.015])
     assert all(np.all(t.away == 0) for t in targets(s))
+
+
+@pytest.mark.parametrize("overlap", [0.006, 0.015])
+def test_a_part_under_the_edge_of_another_is_not_safe(cfg, overlap):
+    """The strip next to the covering part is often missing from the image."""
+    low, top = PartSpec(0, "box", "plastic", (0.109, 0.089, 0.034), 0.4), PartSpec(1, "box", "plastic", (0.06, 0.08, 0.05), 0.3)
+    for dx in (1, -1):
+        s = two_parts(cfg, low, top, [0, 0, 0.017], [dx * (0.0545 + 0.03 - overlap), 0.01, 0.034 + 0.025])
+        z = s.bin_inner_bounds()[0][2] + 0.034
+        assert not any(t.safe for t in targets(s) if abs(t.pos[2] - z) < 0.004)
+
+
+def test_free_sides_before_boxed_in(cfg):
+    """Same height, both safe: the one with nothing beside it comes first."""
+    specs = [PartSpec(k, "box", "plastic", (0.07, 0.07, 0.05), 0.3) for k in (0, 1)] + \
+            [PartSpec(k, "box", "plastic", (0.05, 0.07, 0.03), 0.12) for k in (2, 3)]
+    for dx in (1, -1):
+        s = build_scene(cfg, specs)
+        lo, hi = s.bin_inner_bounds()
+        base = np.r_[(lo + hi)[:2] / 2, lo[2]]
+        for adr, p in zip(s.part_qpos_adr, ([-dx * 0.1, 0, 0.025], [dx * 0.1, 0, 0.025], [dx * 0.1 + 0.0605, 0, 0.015], [dx * 0.1 - 0.0605, 0, 0.015])):
+            s.data.qpos[adr:adr + 3] = base + p
+        t = targets(s)[0]
+        assert (t.pos[0] - base[0]) * dx < 0

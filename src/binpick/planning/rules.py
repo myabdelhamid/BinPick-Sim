@@ -284,6 +284,19 @@ def _crowding(view: BinView, label: int, cfg: Config) -> float:
     return float((touched & outline).sum() / outline.sum())
 
 
+def _boxed_in(view: BinView, label: int, cfg: Config) -> float:
+    """Share of the surroundings of a surface with something (of any height, or a wall) right beside the part."""
+    k0, k1 = (int(round(x / view.cell)) for x in cfg.planner.beside_band)
+    mask = np.pad(view.labels == label, k1 + 1)
+    seen = np.pad(view.z > view.lo[2] + cfg.perception.min_part_height, k1 + 1, constant_values=True)  # outside: wall
+    ij = np.argwhere(mask)
+    lo, hi = np.maximum(ij.min(axis=0) - k1 - 1, 0), ij.max(axis=0) + k1 + 2
+    box = (slice(lo[0], hi[0]), slice(lo[1], hi[1]))
+    dist = ndimage.distance_transform_edt(~mask[box])
+    band = (dist >= k0) & (dist <= k1)
+    return float(seen[box][band].mean()) if band.any() else 0.0
+
+
 def wall_direction(view: BinView, label: int, flat: bool, cfg: Config) -> np.ndarray:
     """Horizontal direction (world xy, 0 to 1 per axis) away from a bin wall the part touches or nearly touches. Only
     walls: shifting away from a neighbour pushes the part into the next one."""
@@ -355,7 +368,7 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
         crowd, away = _crowding(view, c, cfg), wall_direction(view, c, faces[c] is not None, cfg)
         score = (pl.w_height * (pos[sel, 2] - view.lo[2]) / (view.hi[2] - view.lo[2]) + pl.w_seal * seal
                  + pl.w_wall * np.minimum(wall[sel] / pl.wall_saturation, 1.0)
-                 - pl.w_center * off / r - pl.w_crowd * crowd)
+                 - pl.w_center * off / r - pl.w_crowd * crowd - pl.w_beside * _boxed_in(view, c, cfg))
         kept = 0
         for m in np.argsort(-score):
             g = sel[m]

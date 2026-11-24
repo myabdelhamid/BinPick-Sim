@@ -279,6 +279,8 @@ class PlannerConfig:
     w_center: float
     w_crowd: float
     oversize_margin: float
+    w_beside: float
+    beside_band: tuple[float, float]
     crowd_reach: float
     wall_touch: tuple[float, float]
     flank_unseen: float

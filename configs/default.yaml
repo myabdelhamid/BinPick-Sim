@@ -156,7 +156,9 @@ planner:
   w_center: 0.5                  # penalty per cup radius away from the surface center
   w_crowd: 1.0                   # penalty for the share of the outline with something taller next to it (pinned?)
   oversize_margin: 0.006         # a surface longer than the longest part plus this is two parts
-  crowd_reach: 0.008             # how far around the surface to look for that
+  w_beside: 0.5                  # penalty for the share of the surroundings with something right beside the part
+  beside_band: [0.006, 0.010]    # "beside" = this far beyond the surface's seen edge (4 mm inside the real one)
+  crowd_reach: 0.010             # how far around the surface to look for that
   wall_touch: [0.006, 0.008]     # a flat surface seen this close to a wall touches it ... surely not (its seen edge is 4 mm inside)
   flank_unseen: 0.0035           # a curved side reaches this much further
   safe_crowd: 0.01               # a pick is safe with at most this share of the outline crowded, ...
