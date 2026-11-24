@@ -38,6 +38,13 @@ cameras:
   bin_height_above_rim: 0.55
   tray_fovy: 42.0                # whole tray plus parts overhanging edge slots stay in frame
   tray_height: 0.90              # above tray surface
+  # depth noise (both cameras). Between an industrial structured-light camera (about 0.1 mm) and a low-cost
+  # stereo camera (about 2 mm) at this distance
+  depth_sigma: 0.0005            # m, random error per pixel at sigma_distance, growing with distance squared
+  sigma_distance: 0.65
+  dropout: 0.01                  # share of pixels with no reading
+  edge_jump: 0.005               # pixels next to a depth jump larger than this ...
+  edge_dropout: 0.5              # ... lose their reading this often
 
 shaker:
   amplitude: 0.025               # 25 mm at 4 Hz = 1.6 g: flattens the pile (15 mm at 3 Hz = 0.5 g barely moved it)
@@ -116,6 +123,8 @@ suction:
   sensor_noise_kpa: 1.0
 
 perception:
+  smooth_tol: 0.002              # average a depth reading with neighbours within 2 mm of it (4 x depth_sigma) ...
+  smooth_reach: 2                # ... up to 2 pixels away
   cell: 0.001                    # height-map cell (camera pixels are 0.75-1.05 mm apart)
   min_part_height: 0.008         # above the bin floor = part (thinnest part is 20 mm)
   wall_margin: 0.003             # ignore cells this close to the walls

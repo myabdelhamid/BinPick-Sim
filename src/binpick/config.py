@@ -97,9 +97,18 @@ class CamerasConfig:
     bin_height_above_rim: float
     tray_fovy: float
     tray_height: float
+    depth_sigma: float
+    sigma_distance: float
+    dropout: float
+    edge_jump: float
+    edge_dropout: float
 
     def __post_init__(self):
-        _positive(self, *(f.name for f in fields(self)))
+        noise = ("depth_sigma", "dropout", "edge_dropout")  # 0 turns each one off
+        _positive(self, *(f.name for f in fields(self) if f.name not in noise))
+        for name in noise:
+            if not 0 <= getattr(self, name) < 1:
+                raise ValueError(f"{name}: must be in [0, 1)")
 
 
 @dataclass(frozen=True)
@@ -232,6 +241,8 @@ class SuctionConfig:
 
 @dataclass(frozen=True)
 class PerceptionConfig:
+    smooth_tol: float
+    smooth_reach: int
     cell: float
     min_part_height: float
     wall_margin: float

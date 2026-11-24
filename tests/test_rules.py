@@ -8,7 +8,7 @@ from binpick.sim.parts import PartSpec
 from binpick.sim.scene import build_scene
 from binpick.sim.settle import make_settled_scene
 from binpick.sim.suction import seal_quality
-from helpers import quat_axis_angle, single_part_scene, teleport_cup
+from helpers import quat_axis_angle, quat_mul, single_part_scene, teleport_cup
 
 
 def targets(s):
@@ -170,3 +170,31 @@ def test_obstruction_check(cfg):
     assert not _obstructed(view, base + [0.0505 - 0.030, 0, 0], up, cfg)   # clear
     assert _obstructed(view, base + [0.0505 - 0.036, 0, 0], lean, cfg)     # clear upright, but the tool leans over it
     assert not _obstructed(view, base + [0.0505 - 0.036, 0, 0], up, cfg)
+
+
+@pytest.mark.parametrize("dia", [0.041, 0.043, 0.046])
+@pytest.mark.parametrize("turn", [0.0, 0.6])
+def test_thin_cylinder_is_pickable_though_its_steep_sides_are_hard_to_see(cfg, dia, turn):
+    s = single_part_scene(cfg, PartSpec(0, "cylinder", "plastic", (dia, 0.09), 0.2),
+                          quat=quat_mul(quat_axis_angle([0, 0, 1], turn), quat_axis_angle([1, 0, 0], np.pi / 2)))
+    s.data.qpos[s.part_qpos_adr[0] + 2] = s.bin_inner_bounds()[0][2] + dia / 2
+    t = targets(s)[0]
+    across = np.array([np.cos(turn), np.sin(turn)])
+    assert abs((t.pos - s.data.xpos[s.part_body_ids[0]])[:2] @ across) < 0.003
+    teleport_cup(s, t.pos, -t.normal)
+    assert seal_quality(s, 0) == pytest.approx(t.seal, abs=0.08)
+
+
+def test_a_lip_past_a_box_edge_is_never_taken_for_a_curve(cfg):
+    for w in (0.034, 0.038, 0.042):
+        s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.10, w, 0.04), 0.2))
+        assert targets(s) == [], w
+
+
+def test_thin_cylinder_with_a_part_lying_against_its_side_is_rejected(cfg):
+    """The lip would land on the neighbour."""
+    d = 0.046
+    cyl = PartSpec(0, "cylinder", "plastic", (d, 0.09), 0.2)
+    box = PartSpec(1, "box", "plastic", (0.06, 0.10, d - 0.006), 0.2)
+    s = two_parts(cfg, cyl, box, [0, 0, d / 2], [d / 2 * 0.62 + 0.03, 0, (d - 0.006) / 2], qa=quat_axis_angle([1, 0, 0], np.pi / 2))
+    assert all(t.pos[0] > s.data.xpos[s.part_body_ids[1]][0] - 0.03 for t in targets(s))

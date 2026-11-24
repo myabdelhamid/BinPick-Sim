@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mujoco
 import numpy as np
+from scipy import ndimage
 
 from binpick.sim.scene import Scene
 
@@ -25,6 +26,16 @@ def render(scene: Scene, camera: str, depth: bool = True,
             r.update_scene(scene.data, camera=camera)
             d = r.render().astype(np.float32)
     return rgb, d
+
+
+def sense_depth(scene: Scene, camera: str) -> np.ndarray:
+    """What the depth camera reports: the rendered depth with random error and missing readings (NaN)."""
+    c, rng = scene.cfg.cameras, scene.sensor_rng
+    d = render(scene, camera)[1]
+    jump = ndimage.maximum_filter(d, 3) - ndimage.minimum_filter(d, 3) > c.edge_jump
+    missing = rng.random(d.shape) < np.where(jump, c.edge_dropout, c.dropout)
+    noisy = d + rng.normal(0.0, 1.0, d.shape) * c.depth_sigma * (d / c.sigma_distance) ** 2
+    return np.where(missing, np.nan, noisy).astype(np.float32)
 
 
 def intrinsics(scene: Scene, camera: str) -> np.ndarray:

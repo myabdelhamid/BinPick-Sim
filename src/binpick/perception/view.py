@@ -8,7 +8,7 @@ import numpy as np
 import open3d as o3d
 from scipy import ndimage
 
-from binpick.sim.camera import intrinsics, render
+from binpick.sim.camera import intrinsics, sense_depth
 from binpick.sim.scene import Scene
 
 NORMAL_SPAN = 2  # cells on each side used for slopes and for comparing neighbouring normals
@@ -25,6 +25,35 @@ def depth_to_cloud(depth: np.ndarray, K: np.ndarray, cam_pos: np.ndarray, cam_R:
         o3d.geometry.Image(np.ascontiguousarray(depth, dtype=np.float32)), k, np.linalg.inv(T),
         depth_scale=1.0, depth_trunc=100.0, project_valid_depth_only=False)
     return np.asarray(pc.points).reshape(h, w, 3).copy()
+
+
+def denoise(depth: np.ndarray, tol: float, reach: int) -> np.ndarray:
+    """Average each reading with the neighbours (reach pixels around) that differ from it by less than tol: random
+    error shrinks, height jumps stay sharp. Missing readings stay missing."""
+    total, count = np.zeros(depth.shape), np.zeros(depth.shape)
+    padded = np.pad(depth.astype(float), reach, constant_values=np.nan)
+    h, w = depth.shape
+    for di in range(2 * reach + 1):
+        for dj in range(2 * reach + 1):
+            nb = padded[di:di + h, dj:dj + w]
+            near = np.abs(nb - depth) < tol
+            total[near] += nb[near]
+            count += near
+    with np.errstate(invalid="ignore"):
+        return np.where(count > 0, total / count, np.nan)
+
+
+def fill_pinholes(z: np.ndarray, max_spread: float) -> np.ndarray:
+    """Fill cells without a reading that lie inside one smooth surface (5 of the 8 neighbours seen, all alike)."""
+    nb = np.stack([ndimage.shift(z, s, order=0, cval=np.nan) for s in
+                   [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]])
+    seen = np.isfinite(nb)
+    hi, lo = np.where(seen, nb, -np.inf).max(axis=0), np.where(seen, nb, np.inf).min(axis=0)
+    ok = np.isnan(z) & (seen.sum(axis=0) >= 5)
+    ok[ok] = (hi - lo)[ok] < max_spread
+    out = z.copy()
+    out[ok] = np.where(seen, nb, 0.0).sum(axis=0)[ok] / seen.sum(axis=0)[ok]
+    return out
 
 
 @dataclass(frozen=True)
@@ -61,7 +90,7 @@ class BinView:
 
 def _height_map(P: np.ndarray, lo: np.ndarray, hi: np.ndarray, cell: float) -> np.ndarray:
     n = np.round((hi[:2] - lo[:2]) / cell).astype(int) + 1
-    p = P.reshape(-1, 3)
+    p = np.nan_to_num(P.reshape(-1, 3), nan=-1e3)  # a missing reading lands outside the bin
     ij = np.round((p[:, :2] - lo[:2]) / cell).astype(int)
     keep = np.all((ij >= 0) & (ij < n), axis=1)
     z = np.full(n, -np.inf)
@@ -74,7 +103,10 @@ def _grooves(P: np.ndarray, lo: np.ndarray, cell: float, shape: tuple[int, int],
     """Cells where the camera saw into a narrow gap between two parts. The height map keeps the highest point
     per cell, so gaps of a pixel or two must be found in the image itself (black top-hat)."""
     px = max(3, 2 * int(np.ceil(width / cell / 2)) + 1)
-    hit = P[ndimage.black_tophat(P[..., 2], size=(px, px)) > depth]
+    seen = np.isfinite(P[..., 2])
+    z = np.where(seen, P[..., 2], ndimage.maximum_filter(np.where(seen, P[..., 2], -np.inf), 3))  # missing is not deep
+    z[~np.isfinite(z)] = np.nanmin(P[..., 2])
+    hit = P[seen & (ndimage.black_tophat(z, size=(px, px)) > depth)]
     ij = np.round((hit[:, :2] - lo[:2]) / cell).astype(int)
     ij = ij[np.all((ij >= 0) & (ij < shape), axis=1)]
     g = np.zeros(shape, bool)
@@ -111,11 +143,13 @@ def _edges(z: np.ndarray, normals: np.ndarray, cell: float, max_slope: float, cr
 
 def observe_bin(scene: Scene) -> BinView:
     cfg = scene.cfg.perception
-    _, depth = render(scene, "bin_cam")
+    depth = denoise(sense_depth(scene, "bin_cam"), cfg.smooth_tol, cfg.smooth_reach)
     cam = scene.data.cam("bin_cam")
     P = depth_to_cloud(depth, intrinsics(scene, "bin_cam"), cam.xpos, cam.xmat.reshape(3, 3))
     lo, hi = scene.bin_inner_bounds()
     z = _height_map(P, lo, hi, cfg.cell)
+    for _ in range(2):  # twice: some holes are two cells wide
+        z = fill_pinholes(z, 2 * cfg.max_slope * cfg.cell)
     z[_grooves(P, lo, cfg.cell, z.shape, cfg.groove_width, cfg.groove_depth)] = np.nan
     normals = _normals(z, cfg.cell)
     part = z > lo[2] + cfg.min_part_height

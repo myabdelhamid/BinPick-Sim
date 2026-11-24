@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from binpick.sim.camera import intrinsics, render
+from binpick.sim.camera import intrinsics, sense_depth
 from binpick.sim.scene import Scene
 
 PLACE_TOL = 0.010        # spec: part center within +-10 mm of the slot center
@@ -40,7 +40,7 @@ def place_yaw(long_axis_cup: np.ndarray) -> float:
 
 
 def _tray_points(scene: Scene) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    _, depth = render(scene, "tray_cam")
+    depth = sense_depth(scene, "tray_cam")
     K = intrinsics(scene, "tray_cam")
     cam = scene.data.cam("tray_cam").xpos
     h, w = depth.shape

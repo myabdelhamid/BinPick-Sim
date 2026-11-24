@@ -22,6 +22,10 @@ from binpick.perception.view import BinView
 from binpick.planning.types import GraspTarget
 
 LIP_STEPS = 16
+STEEP = 1.2        # slope up to which readings on a curved side are trusted (50 deg) ...
+FLANK = 0.6        # ... reached this far (share of the radius) to both sides of the axis
+CYL_RMS = 0.0005   # fit error that still counts as a cylinder
+CYL_R_MAX = 0.032  # thicker ones show their sides well enough
 CREASE_SPAN = 3   # lip steps (about 4 mm) over which a surface direction is measured
 
 
@@ -55,6 +59,7 @@ def _lay_cup(view: BinView, pos: np.ndarray, n: np.ndarray, cfg: Config):
     z = _surface_z(view, flat[..., :2])
     # height below the cup plane along the cup axis of the surface point above/below each sample
     h = -(z - flat[..., 2]) * n[:, None, None, 2]
+    h = _continue_curve(h, d, th, cfg)
     prev = np.concatenate([np.zeros_like(h[..., :1]), h[..., :-1]], axis=2)
     dh = h - prev
     seg = np.hypot(step, dh)
@@ -76,6 +81,38 @@ def _lay_cup(view: BinView, pos: np.ndarray, n: np.ndarray, cfg: Config):
     sol = np.linalg.solve(AtA, np.einsum("nks,nksi,nks->ni", w, A, hz)[..., None])[..., 0]
     fit = n + sol[:, :1] * x + sol[:, 1:2] * y
     return lip, fit / np.linalg.norm(fit, axis=1, keepdims=True)
+
+
+def _continue_curve(h: np.ndarray, d: np.ndarray, th: np.ndarray, cfg: Config) -> np.ndarray:
+    """A camera above sees the sides of a thin cylinder badly. Where the surface under the cup is a cylinder, its steep
+    flanks are taken from that cylinder instead of from the readings there. Never for flat faces, and not where
+    something taller is seen in the way."""
+    s, (N, K, S) = cfg.suction, h.shape
+    step, px, py = d[0], d * np.cos(th)[:, None], d * np.sin(th)[:, None]
+    prev = np.concatenate([np.zeros_like(h[..., :1]), h[..., :-1]], axis=2)
+    good = np.logical_and.accumulate(np.abs(h - prev) <= STEEP * step, axis=2)  # readings up to the first steep or missing one
+    w, hz = good.astype(float), np.where(good, h, 0.0)
+
+    def fit(A: np.ndarray, y: np.ndarray) -> np.ndarray:
+        M = np.einsum("nks,nksi,nksj->nij", w, A, A) + 1e-15 * np.eye(A.shape[-1])
+        return np.linalg.solve(M, np.einsum("nks,nksi,nks->ni", w, A, y)[..., None])[..., 0]
+
+    # direction of strongest curvature, then a circle across it
+    quad = np.broadcast_to(np.stack([px**2, px * py, py**2, px, py], axis=-1), h.shape + (5,))
+    a, b, c = fit(quad, hz)[:, :3].T
+    ang = 0.5 * np.arctan2(b, a - c)
+    t = px * np.cos(ang)[:, None, None] + py * np.sin(ang)[:, None, None]
+    A, B, C = fit(np.stack([t, hz, np.ones_like(t)], axis=-1), t**2 + hz**2).T[:, :, None, None]
+    tc, R2 = A / 2, C + A**2 / 4 + B**2 / 4
+    R = np.sqrt(np.maximum(R2, 1e-12))
+    u = t - tc
+    model = B / 2 - np.sqrt(np.maximum(R**2 - u**2, 0.0))
+    n_good = np.maximum(w.sum(axis=(1, 2)), 1)
+    rms = np.sqrt((w * (hz - model) ** 2).sum(axis=(1, 2)) / n_good)
+    both = [np.where(good, sg * u, -np.inf).max(axis=(1, 2)) > FLANK * R[:, 0, 0] for sg in (1, -1)]
+    is_cyl = (rms < CYL_RMS) & (R[:, 0, 0] > 0.95 * s.curve_radius_min) & (R[:, 0, 0] < CYL_R_MAX) & both[0] & both[1]
+    use = is_cyl[:, None, None] & ~good & (np.abs(u) > FLANK * R) & (np.abs(u) < R) & ~(h < model - 0.002)
+    return np.where(use, model, h)
 
 
 def _creased(h: np.ndarray, used: np.ndarray, step: float, limit: float) -> np.ndarray:
@@ -162,7 +199,8 @@ def _crowding(view: BinView, label: int, cfg: Config) -> float:
     ii, jj = np.mgrid[0:m.shape[0], 0:m.shape[1]]
     # surface height expected here if the nearest surface cell continued along the mean plane
     expect = z[near[0], near[1]] - (n[0] * (ii - near[0]) + n[1] * (jj - near[1])) * view.cell / n[2]
-    return float(np.mean(z[rim] - expect[rim] > cfg.planner.obstacle_height))
+    seen = rim & np.isfinite(z)
+    return float(np.mean(z[seen] - expect[seen] > cfg.planner.obstacle_height)) if seen.any() else 0.0
 
 
 def longest_part(cfg: Config) -> float:

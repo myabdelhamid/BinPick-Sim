@@ -35,6 +35,7 @@ class Scene:
     cup_geom: str = PREFIX + "cup"
     shaker_actuators: tuple[str, str] = ("shaker_x", "shaker_y")
     bin_body: str = "bin"
+    sensor_rng: np.random.Generator = field(default_factory=lambda: np.random.default_rng(0))  # depth-camera noise
     arm_actuator_names: list[str] = field(default_factory=lambda: [f"{PREFIX}actuator{i}" for i in range(1, 8)])
 
     def bin_inner_bounds(self) -> tuple[np.ndarray, np.ndarray]:

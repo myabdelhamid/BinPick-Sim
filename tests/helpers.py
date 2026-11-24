@@ -13,6 +13,12 @@ def quat_axis_angle(axis, angle):
     return np.r_[np.cos(angle / 2), np.sin(angle / 2) * axis]
 
 
+def quat_mul(a, b):
+    out = np.zeros(4)
+    mujoco.mju_mulQuat(out, np.asarray(a, float), np.asarray(b, float))
+    return out
+
+
 def single_part_scene(cfg, spec: PartSpec, quat=(1, 0, 0, 0), xy_offset=(0.0, 0.0), z=None):
     """Scene with one part posed in the middle of the bin (resting on the floor unless z is given)."""
     s = build_scene(cfg, [spec])
