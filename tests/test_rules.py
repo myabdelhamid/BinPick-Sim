@@ -135,3 +135,38 @@ def test_never_grips_the_seam_between_two_parts(cfg, gap_mm):
     s = two_parts(cfg, *b, [-d, 0, 0.02], [d, 0, 0.02])
     for t in targets(s):
         assert abs(t.pos[0] - 0.55) > 0.022 and abs(t.center[0] - 0.55) > 0.03, (t.pos, t.center)
+
+
+def test_tool_leaning_into_a_wall_is_rejected(cfg):
+    """A tilted face low in the bin, facing a wall: the lip fits, but the tool would hit the wall above."""
+    import dataclasses
+
+    th = np.deg2rad(14)
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.10, 0.10, 0.04), 0.4), quat=quat_axis_angle([0, 1, 0], -th))
+    lo, hi = s.bin_inner_bounds()
+    s.data.qpos[s.part_qpos_adr[0]:s.part_qpos_adr[0] + 3] = [lo[0] + 0.062, 0.0, lo[2] + 0.034]
+    mujoco.mj_forward(s.model, s.data)
+    view = observe_bin(s)
+
+    def at_rim(t):
+        return (t.pos + t.normal * (hi[2] - t.pos[2]) / t.normal[2])[0] - lo[0]
+
+    need = cfg.cup.diameter / 2 + cfg.planner.wall_clearance
+    loose = dataclasses.replace(cfg, planner=dataclasses.replace(cfg.planner, wall_clearance=-1.0))
+    without = rules_targets(view, loose)
+    assert without and min(at_rim(t) for t in without) < need  # the check is what rejects them
+    assert all(at_rim(t) >= need for t in rules_targets(view, cfg))
+
+
+def test_obstruction_check(cfg):
+    from binpick.planning.rules import _obstructed
+
+    s = two_parts(cfg, PartSpec(0, "box", "plastic", (0.10, 0.10, 0.02), 0.2), PartSpec(1, "box", "plastic", (0.04, 0.10, 0.07), 0.3),
+                  [0, 0, 0.010], [0.0705, 0, 0.035])  # tall box face at x = +0.0505
+    mujoco.mj_forward(s.model, s.data)
+    view, base = observe_bin(s), np.array([0.55, 0.0, s.bin_inner_bounds()[0][2] + 0.02])
+    up, lean = np.array([0, 0, 1.0]), np.array([np.sin(np.deg2rad(20)), 0, np.cos(np.deg2rad(20))])
+    assert _obstructed(view, base + [0.0505 - 0.023, 0, 0], up, cfg)       # inside cup radius + clearance
+    assert not _obstructed(view, base + [0.0505 - 0.030, 0, 0], up, cfg)   # clear
+    assert _obstructed(view, base + [0.0505 - 0.036, 0, 0], lean, cfg)     # clear upright, but the tool leans over it
+    assert not _obstructed(view, base + [0.0505 - 0.036, 0, 0], up, cfg)

@@ -67,11 +67,6 @@ def _height_map(P: np.ndarray, lo: np.ndarray, hi: np.ndarray, cell: float) -> n
     z = np.full(n, -np.inf)
     np.maximum.at(z, tuple(ij[keep].T), p[keep, 2])
     z[~np.isfinite(z)] = np.nan
-    # pixels are up to ~1.05 mm apart at the floor: fill single-cell gaps from their neighbours
-    pad = np.pad(z, 1, mode="edge")
-    near = np.stack([np.roll(pad, (i, j), (0, 1))[1:-1, 1:-1] for i in (-1, 0, 1) for j in (-1, 0, 1)])
-    fill = np.isnan(z) & (np.isfinite(near).sum(axis=0) >= 4)
-    z[fill] = np.nanmedian(near[:, fill], axis=0)
     return z
 
 

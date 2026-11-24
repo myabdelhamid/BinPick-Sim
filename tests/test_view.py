@@ -93,3 +93,13 @@ def test_every_labelled_cell_has_a_height_and_a_normal(cfg):
         s, _ = make_settled_scene(cfg, seed)
         v = observe_bin(s)
         assert np.isfinite(v.z[v.labels > 0]).all() and np.isfinite(v.normals[v.labels > 0]).all(), seed
+
+
+@pytest.mark.parametrize("off", [(0.0, 0.0), (0.12, 0.08), (-0.13, 0.07)])
+def test_flat_face_at_the_floor_has_no_holes(cfg, off):
+    """Camera pixels are wider than a cell down there; unfilled cells would break every lip path."""
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.10, 0.10, 0.02), 0.24), xy_offset=off)
+    v = observe_bin(s)
+    c = s.data.xpos[s.part_body_ids[0]]
+    (i0, j0), (i1, j1) = v.index(c[:2] - 0.045), v.index(c[:2] + 0.045)
+    assert np.isfinite(v.z[i0:i1, j0:j1]).all()
