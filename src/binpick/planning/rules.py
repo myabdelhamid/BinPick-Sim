@@ -25,6 +25,7 @@ from binpick.planning.types import GraspTarget
 
 LIP_STEPS = 16
 FACE_RMS = 0.0005  # fit error that still counts as a flat face
+MIN_CURVED = 0.03  # spread of the normals across the axis from which a surface counts as curved
 FACE_TOL = 0.0015  # seen points this close to its plane belong to it
 FACE_FILL = 0.8    # share of the fitted rectangle that must be seen
 EDGE_STRIP = 0.0015  # this close to the fitted edge a seen drop may be the edge itself
@@ -54,31 +55,83 @@ def _surface_z(view: BinView, xy: np.ndarray) -> np.ndarray:
 
 @dataclass(frozen=True)
 class Face:
-    """A flat rectangular surface: center, unit axes a (long) and b, normal, half sizes."""
+    """A flat rectangular surface (center, unit axes a (long) and b, normal, half sizes), or with a radius the side of a
+    lying cylinder: center on its top line, a along its axis, half = (half length, half of the width seen well)."""
     center: np.ndarray
     a: np.ndarray
     b: np.ndarray
     n: np.ndarray
     half: tuple[float, float]
+    radius: float | None = None
+
+
+def _extent(u: np.ndarray, v: np.ndarray, cell: float) -> np.ndarray:
+    """Where rows of cells along u begin and end in v: the outer fifth of the rows (elsewhere edge cells are missing)."""
+    k = np.round((u - u.min()) / cell).astype(int)
+    first, last = np.full(k.max() + 1, np.inf), np.full(k.max() + 1, -np.inf)
+    np.minimum.at(first, k, v)
+    np.maximum.at(last, k, v)
+    ok = last - first > 5 * cell
+    return np.array([np.percentile(first[ok], 20) - cell / 2, np.percentile(last[ok], 80) + cell / 2]) if ok.any() else np.zeros(2)
+
+
+def _patch(view: BinView, label: int):
+    """The part of the map around a surface: its mask, heights and xy there."""
+    mask = view.labels == label
+    ij = np.argwhere(mask)
+    lo, hi = np.maximum(ij.min(axis=0) - 6, 0), ij.max(axis=0) + 7
+    box = (slice(lo[0], hi[0]), slice(lo[1], hi[1]))
+    m = mask[box]
+    return m, view.z[box], view.xy(np.moveaxis(np.indices(m.shape), 0, -1) + lo)
+
+
+def _grown(m: np.ndarray, close: np.ndarray) -> np.ndarray:
+    """The surface's cells plus connected cells around it that fit it."""
+    on = ndimage.binary_dilation(m, iterations=4) & close
+    comp, _ = ndimage.label(on)
+    return np.isin(comp, np.unique(comp[m & on]))
+
+
+def cylinder_face(view: BinView, label: int, cfg: Config) -> Face | None:
+    """The side of a lying cylinder, its ends located from all cells along them. None if the surface is no cylinder."""
+    m, z, xy = _patch(view, label)
+    nn = view.normals[view.labels == label]
+    w, E = np.linalg.eigh(nn.T @ nn / len(nn))
+    a = E[:, 0]                                   # no normal points along the axis
+    if abs(a[2]) > np.sin(np.deg2rad(25)) or w[1] < MIN_CURVED:
+        return None
+    up = np.array([0, 0, 1.0]) - a[2] * a
+    n = up / np.linalg.norm(up)
+    b = np.cross(n, a)
+    P = np.column_stack([xy[m], z[m]])
+    p0 = P.mean(axis=0)
+    u, v, h = (P - p0) @ a, (P - p0) @ b, (P - p0) @ n
+    A, B, C = np.linalg.lstsq(np.column_stack([v, h, np.ones_like(v)]), v**2 + h**2, rcond=None)[0]
+    R = float(np.sqrt(max(C + (A**2 + B**2) / 4, 0.0)))
+    rms = np.sqrt(np.mean((np.hypot(v - A / 2, h - B / 2) - R) ** 2))
+    if rms > FACE_RMS or not 0.95 * cfg.parts.cyl_diameter[0] / 2 < R < 1.1 * cfg.parts.cyl_diameter[1] / 2:
+        return None
+    axis0 = p0 + b * A / 2 + n * B / 2
+    Q = np.dstack([xy, z]) - axis0
+    on = _grown(m, np.abs(np.hypot(Q @ b, Q @ n) - R) < FACE_TOL) & (np.abs(Q @ b) < FLANK * R)
+    if not on.any():
+        return None
+    eu = _extent((Q @ b)[on], (Q @ a)[on], view.cell)
+    if np.ptp(eu) <= 0:
+        return None
+    return Face(axis0 + n * R + a * eu.mean(), a, b, n, (float(np.ptp(eu) / 2), FLANK * R), R)
 
 
 def flat_face(view: BinView, label: int) -> Face | None:
     """The rectangle a flat surface fills, with edges located from all cells along them (a single cell at an edge is
     often missing). None if the surface is not flat or does not fill a rectangle."""
-    mask = view.labels == label
-    ij = np.argwhere(mask)
-    lo, hi = np.maximum(ij.min(axis=0) - 6, 0), ij.max(axis=0) + 7
-    box = (slice(lo[0], hi[0]), slice(lo[1], hi[1]))
-    m, z = mask[box], view.z[box]
-    xy = view.xy(np.moveaxis(np.indices(m.shape), 0, -1) + lo)
+    m, z, xy = _patch(view, label)
     A = np.column_stack([xy[m], np.ones(m.sum())])
     c = np.linalg.lstsq(A, z[m], rcond=None)[0]
     plane = xy @ c[:2] + c[2]
     if np.sqrt(np.mean((z[m] - plane[m]) ** 2)) > FACE_RMS:
         return None
-    on = ndimage.binary_dilation(m, iterations=4) & (np.abs(z - plane) < FACE_TOL)
-    comp, _ = ndimage.label(on)
-    on = np.isin(comp, np.unique(comp[m & on]))
+    on = _grown(m, np.abs(z - plane) < FACE_TOL)
     n = np.array([-c[0], -c[1], 1.0])
     n /= np.linalg.norm(n)
     long = surface_rectangle(view, label)[1]
@@ -86,41 +139,43 @@ def flat_face(view: BinView, label: int) -> Face | None:
     long /= np.linalg.norm(long)
     q = np.column_stack([xy[on], plane[on]])
     p0 = q.mean(axis=0)
-
-    def extent(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-        """Where rows of cells along u begin and end in v: the outer fifth of the rows (elsewhere edge cells are missing)."""
-        k = np.round((u - u.min()) / view.cell).astype(int)
-        first, last = np.full(k.max() + 1, np.inf), np.full(k.max() + 1, -np.inf)
-        np.minimum.at(first, k, v)
-        np.maximum.at(last, k, v)
-        ok = last - first > 5 * view.cell
-        half_cell = view.cell / 2
-        return np.array([np.percentile(first[ok], 20) - half_cell, np.percentile(last[ok], 80) + half_cell]) if ok.any() else np.zeros(2)
-
     best = None
     for t in np.deg2rad(np.arange(-3.0, 3.1, 0.5)):
         a = long * np.cos(t) + np.cross(n, long) * np.sin(t)
         b = np.cross(n, a)
         u, v = (q - p0) @ a, (q - p0) @ b
-        eu, ev = extent(v, u), extent(u, v)
+        eu, ev = _extent(v, u, view.cell), _extent(u, v, view.cell)
         area = np.ptp(eu) * np.ptp(ev)
         if best is None or area < best[0]:
             best = (area, a, b, eu, ev)
     area, a, b, eu, ev = best
-    if len(q) * view.cell**2 / n[2] < FACE_FILL * area:
+    if area <= 0 or len(q) * view.cell**2 / n[2] < FACE_FILL * area:
         return None
     return Face(p0 + a * eu.mean() + b * ev.mean(), a, b, n, (float(np.ptp(eu) / 2), float(np.ptp(ev) / 2)))
 
 
-def _continue_flat(z: np.ndarray, flat: np.ndarray, face: Face) -> np.ndarray:
-    """Seen heights z at points `flat`, with the unseen strip along the edges of a flat rectangle filled in. Not where
-    something taller is seen, nor for a real drop well inside the rectangle."""
-    d = flat - face.center
-    plane = face.center[2] - (d[..., 0] * face.n[0] + d[..., 1] * face.n[1]) / face.n[2]
-    d = np.concatenate([d[..., :2], (plane - face.center[2])[..., None]], axis=-1)
+def _face_z(face: Face, xy: np.ndarray) -> np.ndarray:
+    """Height of the (unbounded) face above or below points xy; NaN beside a cylinder."""
+    d = xy - face.center[:2]
+    if face.radius is None:
+        return face.center[2] - (d @ face.n[:2]) / face.n[2]
+    # on the cylinder: |part of (d, z) across the axis| = radius, upper root
+    base = np.concatenate([d, np.zeros(d.shape[:-1] + (1,))], axis=-1) + face.radius * face.n  # from the axis, at z = center
+    across = base - (base @ face.a)[..., None] * face.a
+    ez = np.array([0, 0, 1.0]) - face.a[2] * face.a
+    A, B, C = ez @ ez, across @ ez, (across**2).sum(axis=-1) - face.radius**2
+    with np.errstate(invalid="ignore"):
+        return face.center[2] + (-B + np.sqrt(B**2 - A * C)) / A
+
+
+def _continue_face(z: np.ndarray, flat: np.ndarray, face: Face) -> np.ndarray:
+    """Seen heights z at points `flat`, with the unseen strip along the edges of the face filled in. Not where something
+    taller is seen, nor for a real drop well inside it."""
+    model = _face_z(face, flat[..., :2])
+    d = np.concatenate([flat[..., :2], model[..., None]], axis=-1) - face.center
     inside = np.minimum(face.half[0] - np.abs(d @ face.a), face.half[1] - np.abs(d @ face.b))
-    use = (inside >= 0) & ~(z > plane + FACE_TOL) & ~((z < plane - FACE_TOL) & (inside > EDGE_STRIP))
-    return np.where(use, plane, z)
+    use = (inside >= 0) & ~(z > model + FACE_TOL) & ~((z < model - FACE_TOL) & (inside > EDGE_STRIP))
+    return np.where(use, model, z)
 
 
 def _lay_cup(view: BinView, pos: np.ndarray, n: np.ndarray, cfg: Config, lab: np.ndarray, faces: dict[int, Face | None]):
@@ -136,7 +191,7 @@ def _lay_cup(view: BinView, pos: np.ndarray, n: np.ndarray, cfg: Config, lab: np
     z = _surface_z(view, flat[..., :2])
     for k in np.unique(lab):
         if faces[k] is not None:
-            z[lab == k] = _continue_flat(z[lab == k], flat[lab == k], faces[k])
+            z[lab == k] = _continue_face(z[lab == k], flat[lab == k], faces[k])
     # height below the cup plane along the cup axis of the surface point above/below each sample
     h = -(z - flat[..., 2]) * n[:, None, None, 2]
     h = _continue_curve(h, d, th, cfg)
@@ -334,7 +389,7 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
     grid = np.zeros(view.z.shape, bool)
     grid[::k, ::k] = True
     ij = np.argwhere(grid & (view.labels > 0))
-    faces = {int(k): flat_face(view, k) for k in np.unique(view.labels) if k > 0}
+    faces = {int(k): flat_face(view, k) or cylinder_face(view, k, cfg) for k in np.unique(view.labels) if k > 0}
     centers = {k: f.center if f is not None else view.surface_center(k) for k, f in faces.items()}
     centers = {k: c for k, c in centers.items() if view.labels[view.index(c[:2])] == k}
     if not faces:
@@ -371,7 +426,7 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
             continue  # larger than any part: two parts the camera cannot tell apart
         seal = 1.0 - (1.0 - s.curve_limit_q) * drop[sel] / limit
         off = np.linalg.norm((pos[sel] - center)[:, :2], axis=1)
-        crowd, away = _crowding(view, c, cfg), wall_direction(view, c, faces[c] is not None, cfg)
+        crowd, away = _crowding(view, c, cfg), wall_direction(view, c, faces[c] is not None and faces[c].radius is None, cfg)
         score = (pl.w_height * (pos[sel, 2] - view.lo[2]) / (view.hi[2] - view.lo[2]) + pl.w_seal * seal
                  + pl.w_wall * np.minimum(wall[sel] / pl.wall_saturation, 1.0)
                  - pl.w_center * off / r - pl.w_crowd * crowd - pl.w_beside * _boxed_in(view, c, cfg))
