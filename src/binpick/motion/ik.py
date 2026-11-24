@@ -46,13 +46,14 @@ def solve_cup_down(scene: Scene, target_pos: np.ndarray, yaw: float = 0.0, q0: n
 
 def solve_cup_pose(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarray, yaw: float = 0.0,
                    q0: np.ndarray | None = None, pos_tol: float = 1e-3, rot_tol: float = 1e-2,
-                   max_iters: int = 500) -> IKResult:
+                   max_iters: int = 500, flip: bool = True) -> IKResult:
     """Cup tip at `target_pos`, cup axis along `approach_dir` (the direction the cup moves toward the part).
 
     Parts are placed by aligning their long side with the slot, which is symmetric under a
-    180 deg turn, so yaw + pi is tried if yaw fails (keeps joint7 inside its limits).
+    180 deg turn, so yaw + pi is solved too and the closer one used (keeps joint7 inside its limits).
+    `flip=False` solves yaw only: for waypoints of a line, where a half turn would be a jump.
     """
-    results = [_solve(scene, target_pos, approach_dir, y, q0, pos_tol, rot_tol, max_iters) for y in (yaw, yaw + np.pi)]
+    results = [_solve(scene, target_pos, approach_dir, y, q0, pos_tol, rot_tol, max_iters) for y in ((yaw, yaw + np.pi) if flip else (yaw,))]
     ok = [r for r in results if r.ok]
     if not ok:
         return min(results, key=lambda r: r.pos_err)

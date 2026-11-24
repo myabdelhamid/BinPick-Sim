@@ -67,3 +67,27 @@ def test_execute_tracks_plan(empty, cfg):
 def test_execute_abort(empty, cfg):
     tr = joint_move(_arm_q(empty), _arm_q(empty) + 0.3, cfg.motion)
     assert execute(empty, tr, lambda s: False) is False
+
+
+def test_straight_line_does_not_waste_ik_on_a_flipped_wrist(cfg, monkeypatch):
+    """Waypoints follow the previous one; the yaw + pi alternative would be a wrist jump and is not solved."""
+    import mink
+    import numpy as np
+
+    from binpick.motion.ik import DOWN, solve_cup_down
+    from binpick.motion.trajectory import cartesian_line
+    from binpick.sim.scene import build_scene
+
+    s = build_scene(cfg, [])
+    p = np.array([0.55, 0.0, 0.35])
+    r = solve_cup_down(s, p, yaw=0.3)
+    n, real = [0], mink.solve_ik
+
+    def counted(*a, **k):
+        n[0] += 1
+        return real(*a, **k)
+
+    monkeypatch.setattr(mink, "solve_ik", counted)
+    tr = cartesian_line(s, r.q, p, p - [0, 0, 0.15], DOWN, r.yaw, cfg.motion)
+    assert np.abs(np.diff(tr.q, axis=0)).max() < 0.1
+    assert n[0] < 1000  # at most one flipped solve (first waypoint), not one per waypoint (about 500 each)
