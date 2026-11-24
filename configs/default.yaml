@@ -40,9 +40,9 @@ cameras:
   tray_height: 0.90              # above tray surface
 
 shaker:
-  amplitude: 0.015
-  freq_hz: 3.0
-  duration_s: 1.5
+  amplitude: 0.025               # 25 mm at 4 Hz = 1.6 g: flattens the pile (15 mm at 3 Hz = 0.5 g barely moved it)
+  freq_hz: 4.0
+  duration_s: 2.0
   settle_s: 1.0                  # wait after a shake before looking again
 
 settle:
