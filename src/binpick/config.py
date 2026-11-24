@@ -274,6 +274,7 @@ class RunConfig:
     max_attempts: int
     max_shakes: int
     avoid_radius: float
+    changed_radius: float
 
     def __post_init__(self):
         _positive(self, "max_attempts")

@@ -62,7 +62,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
         sup.observer = lambda s, phase: observer(s, phase, sup)
     pick_rng, shake_rng = np.random.default_rng([seed, 3]), np.random.default_rng([seed, 4])
     seen = {"empty": False}
-    # points that failed since the pile last changed (a pick or a shake), by what the robot sensed
+    # points that failed since the pile there last changed (a pick nearby or a shake), by what the robot sensed
     no_seal: list[np.ndarray] = []
     stuck: list[np.ndarray] = []
 
@@ -86,7 +86,8 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
         if sup.attempt(propose) is not None:
             in_a_row = 0
             if sup.last_success_sensed:
-                no_seal.clear(), stuck.clear()
+                for memory in (no_seal, stuck):  # the pile changed around the part that left
+                    memory[:] = [f for f in memory if np.linalg.norm(f - sup.last_target.pos) > cfg.run.changed_radius]
             else:
                 (no_seal if sup.records[-1].sensed == "no_seal" else stuck).append(sup.last_target.pos)
             continue

@@ -133,3 +133,27 @@ def test_a_part_lost_in_lift_is_left_alone_until_the_pile_changes(cfg, monkeypat
     assert [x.target_part for x in r.records[:2]] == [0, 1]           # moves on at once
     assert r.events[0]["event"] == "shake" and r.shakes >= 1          # then shakes, then may try again
     assert len(r.records) == 4 and r.stop == "attempt_limit"
+
+
+def test_a_pick_elsewhere_does_not_make_a_stuck_part_worth_retrying(cfg, monkeypatch):
+    from binpick.supervisor import machine
+
+    boxes = [PartSpec(0, "box", "plastic", (0.08, 0.08, 0.06), 0.4)] + \
+            [PartSpec(k, "box", "plastic", (0.06, 0.06, 0.03), 0.13) for k in (1, 2)]
+    s = build_scene(cfg, boxes)
+    lo, hi = s.bin_inner_bounds()
+    c = (lo + hi) / 2
+    for a, p, b in zip(s.part_qpos_adr, ([-0.13, 0], [0.13, 0.07], [0.13, -0.07]), boxes):
+        s.data.qpos[a:a + 3] = [c[0] + p[0], c[1] + p[1], lo[2] + b.dims[2] / 2]
+    for _ in range(150):
+        mujoco.mj_step(s.model, s.data)
+    real = machine.Supervisor._lift_transport_place
+
+    def stuck_if_left(self, phase, rec, target, n):
+        if target.pos[0] < c[0]:
+            raise machine._Abort("seal_lost_lift")
+        return real(self, phase, rec, target, n)
+
+    monkeypatch.setattr(machine.Supervisor, "_lift_transport_place", stuck_if_left)
+    r = run_bin(s, "rules", seed=0, max_attempts=3)
+    assert [x.target_part for x in r.records][0] == 0 and sorted(x.target_part for x in r.records[1:]) == [1, 2]

@@ -148,3 +148,4 @@ run:
   max_attempts: 40
   max_shakes: 3                  # in a row with nothing to pick
   avoid_radius: 0.025            # rules planner: skip points this close to a failed one until the pile changes
+  changed_radius: 0.10           # a successful pick makes failed points this close worth another try
