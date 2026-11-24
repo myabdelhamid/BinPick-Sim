@@ -85,7 +85,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             stop = "attempt_limit"
             break
         if sup.slots.peek() is None:
-            stop = "tray_full"
+            stop = "empty" if observe_bin(scene).is_empty() else "tray_full"
             break
         if sup.attempt(propose) is not None:
             # after a safe pick start afresh; after a risky one a single shake may bring a safe one

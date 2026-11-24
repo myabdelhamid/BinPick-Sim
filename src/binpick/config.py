@@ -188,6 +188,7 @@ class MotionConfig:
     retreat_dist: float
     touch_start: float
     touch_past: float
+    guard_force_n: float
     touch_speed: float
     probe_speed: float
     probe_lag: float

@@ -189,3 +189,10 @@ def test_the_camera_noise_depends_only_on_the_seed(cfg):
     a = run_bin(s, "rules", seed=0)
     b = run_bin(loose_parts_scene(cfg), "rules", seed=0)
     assert [x.cycle_time_s for x in a.records] == [x.cycle_time_s for x in b.records]
+
+
+@pytest.mark.parametrize("cols,stop", [(3, "empty"), (2, "tray_full")])
+def test_a_full_tray_and_an_empty_bin_is_called_empty(cfg, cols, stop):
+    small = dataclasses.replace(cfg, tray=dataclasses.replace(cfg.tray, rows=1, cols=cols))
+    r = run_bin(loose_parts_scene(small), "rules", seed=0)
+    assert r.placed == cols and r.stop == stop

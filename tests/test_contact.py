@@ -1,4 +1,6 @@
 """Perception-side placing: the robot does not know the part's height and grips off-center."""
+import dataclasses
+
 import mujoco
 import numpy as np
 import pytest
@@ -174,3 +176,27 @@ def test_set_down_contact_is_felt_not_missed(cfg, kg, bound):
     assert log[-1][0] < stop  # the place phase ended (touch detected, then came to rest) right after first contact
     v = (log[first - 10][2] - log[first - 1][2]) / (log[first - 1][0] - log[first - 10][0])
     assert 0.03 < v < 0.12  # m/s on landing
+
+
+def test_contact_on_the_fast_approach_stops_the_arm(cfg):
+    """The camera was wrong by 40 mm: the cup meets the part while still moving fast."""
+    s = single_part_scene(cfg, PartSpec(0, "box", "aluminium", (0.09, 0.09, 0.06), 1.3))
+    for _ in range(100):
+        mujoco.mj_step(s.model, s.data)
+    t = oracle_targets(s)[0]
+    top = t.pos[2]
+    wrong = dataclasses.replace(t, pos=t.pos - [0, 0, 0.04])
+    low = []
+    sup = Supervisor(s, np.random.default_rng(0), seed=0, observer=lambda sc, ph: low.append(sc.data.site(sc.cup_site).xpos[2]))
+    rec = sup.attempt(wrong)
+    assert rec.sensed == "collision" and rec.outcome == "fail"
+    assert min(low) > top - 0.006
+    assert low[-1] > s.bin_inner_bounds()[1][2]  # backed out
+
+
+def test_normal_approaches_are_not_taken_for_contact(cfg):
+    for xy in ((0, 0), (0.12, 0.08), (-0.12, -0.08), (0.1, -0.09)):
+        s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3), xy_offset=xy)
+        for _ in range(100):
+            mujoco.mj_step(s.model, s.data)
+        assert Supervisor(s, np.random.default_rng(0), seed=0).attempt(oracle_targets(s)[0]).outcome == "success", xy

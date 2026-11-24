@@ -27,6 +27,7 @@ PROBE_BLANK_S = 0.12     # contact probing ignores the start of the move (the ar
 PROBE_WINDOW_S = 0.02    # lag is compared with its mean 20-40 ms earlier
 SHAKE_RAMP_S = 0.3
 ARM_HIT_MIN_N = 50.0     # scoring: arm or tool hitting the cell harder than this is a collision
+GUARD_STEPS = 5          # an unexplained force must last this many control steps (10 ms)
 SEAL_POLL_STEPS = 10     # read the vacuum sensor every 10 physics steps (20 ms)
 
 Observer = Callable[[Scene, str], None]
@@ -88,6 +89,26 @@ class Supervisor:
 
     def _run(self, traj: JointTrajectory, hold_s: float | None = None, sideways_gain: float = 0.0) -> bool:
         return execute(self.scene, traj, self._on_step, hold_s=hold_s, sideways_gain=sideways_gain)
+
+    def _guarded(self, traj: JointTrajectory) -> None:
+        """Move with the empty cup; stop if the joints carry a force on the cup that the motion does not explain."""
+        scene, m, d = self.scene, self.scene.model, self.scene.data
+        t0, J, ids = d.time, np.zeros((3, m.nv)), [m.actuator(a).id for a in scene.arm_actuator_names]
+        over = 0
+
+        def step(sc: Scene) -> bool:
+            nonlocal over
+            if not self._on_step(sc):
+                return False
+            mujoco.mj_jacSite(m, d, J, None, self._tip)
+            t = d.time - t0
+            acc = traj.acceleration(t) if t < traj.duration else np.zeros(7)
+            f = np.linalg.pinv(J[:, self._dofs].T) @ (d.actuator_force[ids] - scene.arm_inertia(self._q()) @ acc)
+            over = over + 1 if np.linalg.norm(f) > scene.cfg.motion.guard_force_n else 0
+            return over < GUARD_STEPS
+
+        if not execute(scene, traj, step):
+            raise _Abort("collision")
 
     def _pull(self) -> float:
         """Downward pull on the cup (N) that the arm's joint torques carry. Only meaningful at rest."""
@@ -177,8 +198,8 @@ class Supervisor:
         self._way_in = plan["approach"]
         self._held_part, self._arm_hit_n = None, 0.0
         try:
-            phase("approach", lambda: (self._run(joint_move(self._q(), plan["hover_q"], cfg.motion)),
-                                       self._run(plan["approach"]),
+            phase("approach", lambda: (self._guarded(joint_move(self._q(), plan["hover_q"], cfg.motion)),
+                                       self._guarded(plan["approach"]),
                                        self._probe(plan["near"], target.pos - n * cfg.motion.touch_past, -n, plan["yaw"],
                                                    cfg.motion.touch_speed, loaded=False)))
             self._grip(phase, rec)
