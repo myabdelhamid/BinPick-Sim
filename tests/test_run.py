@@ -222,3 +222,38 @@ def test_a_hard_shake_keeps_a_full_pile_in_the_bin_and_moves_more(cfg):
         assert np.all(p[:, :2] > lo[:2]) and np.all(p[:, :2] < hi[:2])
         moved[h] = np.linalg.norm(p - p0, axis=1).mean()
     assert moved[True] > moved[False]
+
+
+def stick_and_box(cfg):
+    s = build_scene(cfg, [PartSpec(0, "box", "plastic", (0.10, 0.040, 0.040), 0.2), PartSpec(1, "box", "plastic", (0.08, 0.08, 0.04), 0.3)])
+    lo, hi = s.bin_inner_bounds()
+    c = (lo + hi) / 2
+    for a, dx in zip(s.part_qpos_adr, (-0.1, 0.1)):
+        s.data.qpos[a:a + 3] = [c[0] + dx, c[1], lo[2] + 0.02]
+    for _ in range(150):
+        mujoco.mj_step(s.model, s.data)
+    return s
+
+
+def test_three_shakes_without_a_pick_before_giving_up_even_after_a_risky_pick(cfg, monkeypatch):
+    from binpick.supervisor import run
+
+    real = run.rules_targets
+    monkeypatch.setattr(run, "rules_targets", lambda *a, **k: [dataclasses.replace(t, safe=False) for t in real(*a, **k)])
+    r = run_bin(stick_and_box(cfg), "rules", seed=0)
+    assert r.placed == 1 and r.stop == "no_candidate" and r.shakes == 6
+
+
+def test_an_unreachable_safe_target_does_not_block_risky_ones(cfg, monkeypatch):
+    from binpick.supervisor import run
+
+    real = run.rules_targets
+
+    def far_safe_first(*a, **k):
+        ts = real(*a, **k)
+        far = [dataclasses.replace(ts[0], pos=np.array([3.0, 0.0, 0.1]), safe=True)] if ts else []
+        return far + [dataclasses.replace(t, safe=False) for t in ts]
+
+    monkeypatch.setattr(run, "rules_targets", far_safe_first)
+    r = run_bin(stick_and_box(cfg), "rules", seed=0)
+    assert r.placed == 1 and r.records[0].outcome == "success"

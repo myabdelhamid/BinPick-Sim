@@ -4,8 +4,8 @@ import mujoco
 import numpy as np
 import pytest
 
-from binpick.motion.ik import DOWN, solve_cup_down, yaw_of
-from binpick.motion.trajectory import cartesian_line, cartesian_path, execute, joint_move
+from binpick.motion.ik import DOWN, solve_cup_down, solve_cup_pose, yaw_of
+from binpick.motion.trajectory import IKError, cartesian_line, cartesian_path, execute, joint_move
 from binpick.sim.scene import PARK_Q, build_scene
 from helpers import teleport_cup
 
@@ -161,3 +161,23 @@ def test_a_waypoint_a_little_off_the_line_is_better_than_no_line(empty, cfg, mon
     monkeypatch.setattr(tr, "solve_cup_pose", lambda *a, **k: dataclasses.replace(real(*a, **k), ok=False, pos_err=5e-3))
     with pytest.raises(tr.IKError):
         cartesian_line(empty, q0, p, p + [0, 0, 0.1], DOWN, 0.0, cfg.motion)
+
+
+def test_line_near_a_singularity_keeps_the_joint_acceleration_limit(empty, cfg):
+    rng, checked = np.random.default_rng(3), 0
+    lo, hi = empty.bin_inner_bounds()
+    for _ in range(80):
+        az, tilt = rng.uniform(0, 2 * np.pi), np.deg2rad(rng.uniform(25, 60))
+        n = np.array([np.sin(tilt) * np.cos(az), np.sin(tilt) * np.sin(az), np.cos(tilt)])
+        p = np.r_[rng.uniform(lo[:2] + 0.03, hi[:2] - 0.03), lo[2] + 0.12]
+        r = solve_cup_pose(empty, p + n * 0.25, -n)
+        if not r.ok:
+            continue
+        try:
+            tr = cartesian_line(empty, r.q, p + n * 0.25, p, -n, r.yaw, cfg.motion, loaded=False)
+        except IKError:
+            continue
+        a = np.diff(tr.q, n=2, axis=0) / np.diff(tr.t).mean() ** 2
+        assert np.abs(a).max() <= cfg.motion.max_joint_acc * 1.15
+        checked += 1
+    assert checked >= 15

@@ -132,7 +132,8 @@ suction:
   sensor_noise_kpa: 1.0
 
 perception:
-  smooth_tol: 0.002              # average a depth reading with neighbours within 2 mm of it (4 x depth_sigma) ...
+  smooth_sigmas: 4.0             # average a depth reading with neighbours within 4 x the camera's known error of it ...
+  smooth_tol_min: 0.001
   smooth_reach: 2                # ... up to 2 pixels away
   cell: 0.001                    # height-map cell (camera pixels are 0.75-1.05 mm apart)
   min_part_height: 0.008         # above the bin floor = part (thinnest part is 20 mm)

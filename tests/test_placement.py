@@ -1,3 +1,5 @@
+import dataclasses
+
 import mujoco
 import numpy as np
 import pytest
@@ -72,3 +74,27 @@ def test_noise_does_not_fill_empty_slots(cfg):
     s = build_scene(cfg, [])
     for k in range(30):
         assert occupied_slots(s) == set(), k
+
+
+def noisier(cfg, sigma):
+    return dataclasses.replace(cfg, cameras=dataclasses.replace(cfg.cameras, depth_sigma=sigma))
+
+
+@pytest.mark.parametrize("sigma", [0.0007, 0.001, 0.002])
+def test_stronger_noise_does_not_fill_empty_slots_or_hide_thin_parts(cfg, sigma):
+    c = noisier(cfg, sigma)
+    empty = build_scene(c, [])
+    flat = build_scene(c, [PartSpec(0, "box", "plastic", (0.045, 0.045, 0.02), 0.05)])
+    flat.data.qpos[flat.part_qpos_adr[0]:flat.part_qpos_adr[0] + 3] = flat.slot_centers[7] + [0, 0, 0.01]
+    mujoco.mj_forward(flat.model, flat.data)
+    for k in range(10):
+        assert occupied_slots(empty) == set(), k
+        assert occupied_slots(flat) == {7}, k
+
+
+@pytest.mark.parametrize("sigma", [0.0005, 0.001, 0.002])
+def test_verify_position_is_steady_under_noise(cfg, sigma):
+    s = _put_in_slot(noisier(cfg, sigma), 7, offset=(0.004, -0.003))
+    for k in range(10):
+        ok, est = verify_slot(s, 7)
+        assert ok and np.allclose(est - s.slot_centers[7][:2], [0.004, -0.003], atol=0.0025), (k, est)

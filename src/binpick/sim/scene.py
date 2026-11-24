@@ -69,6 +69,20 @@ class Scene:
         mujoco.mj_fullM(m, d, M)
         return M[np.ix_(dof, dof)]
 
+    def arm_torque(self, q: np.ndarray, qd: np.ndarray, qdd: np.ndarray) -> np.ndarray:
+        """Motor torques that the arm with its empty tool needs for this motion (inertia, Coriolis, damping, tool weight)."""
+        M = self.arm_inertia(q)
+        c = self.empty_cell()
+        m, d = c.model, c.data
+        dof = [int(m.joint(j).dofadr[0]) for j in c.arm_joint_names]
+        d.qvel[:] = 0.0
+        d.qvel[dof] = qd
+        mujoco.mj_fwdPosition(m, d)
+        mujoco.mj_fwdVelocity(m, d)
+        tau = M @ qdd + d.qfrc_bias[dof] - d.qfrc_passive[dof]
+        d.qvel[:] = 0.0
+        return tau
+
     def park_arm(self) -> None:
         for j, a, q in zip(self.arm_joint_names, self.arm_actuator_names, PARK_Q):
             self.data.joint(j).qpos[0] = q

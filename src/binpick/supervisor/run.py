@@ -61,7 +61,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
     if observer is not None:
         sup.observer = lambda s, phase: observer(s, phase, sup)
     pick_rng, shake_rng = np.random.default_rng([seed, 3]), np.random.default_rng([seed, 4])
-    seen = {"empty": False, "safe": True}
+    seen = {"empty": False}
     # points that failed since the pile there last changed (a pick nearby or a shake), by what the robot sensed
     no_seal: list[np.ndarray] = []
     stuck: list[np.ndarray] = []
@@ -75,10 +75,11 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             return random_targets(view, cfg, pick_rng)
         ts = rules_targets(view, cfg, avoid=no_seal, avoid_surfaces=stuck)
         safe = [t for t in ts if t.safe]
-        seen["safe"] = bool(safe)
-        return safe or (ts if in_a_row >= cfg.run.max_shakes else [])  # risky picks only once shaking has not helped
+        return ts if waited >= cfg.run.max_shakes else safe  # risky picks only once shaking has not helped
 
-    t0, shakes, in_a_row = scene.data.time, 0, 0
+    t0, shakes = scene.data.time, 0
+    in_a_row = 0  # shakes since the last pick (three without one end the run)
+    waited = 0    # shakes that brought no safe pick (after three, risky ones are taken)
     scene.sensor_rng = np.random.default_rng([seed, 5])
     while True:
         if len(sup.records) >= limit:
@@ -88,8 +89,8 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             stop = "empty" if observe_bin(scene).is_empty() else "tray_full"
             break
         if sup.attempt(propose) is not None:
-            # after a safe pick start afresh; after a risky one a single shake may bring a safe one
-            in_a_row = 0 if seen["safe"] else cfg.run.max_shakes - 1
+            in_a_row = 0
+            waited = 0 if sup.last_target.safe else cfg.run.max_shakes - 1  # after a risky pick one shake is enough
             if sup.last_success_sensed:
                 for memory in (no_seal, stuck):  # the pile changed around the part that left
                     memory[:] = [f for f in memory if np.linalg.norm(f - sup.last_target.pos) > cfg.run.changed_radius]
@@ -103,7 +104,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             stop = "no_candidate"
             break
         sup.shake(shake_rng, in_a_row > 0)  # harder if the first one did not help
-        shakes, in_a_row = shakes + 1, in_a_row + 1
+        shakes, in_a_row, waited = shakes + 1, in_a_row + 1, waited + 1
         no_seal.clear(), stuck.clear()
 
     # ---- scoring (ground truth)

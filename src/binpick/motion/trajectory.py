@@ -123,11 +123,18 @@ def cartesian_path(scene: Scene, q0: np.ndarray, points: list, approach_dir: np.
     joint_acc = m.max_joint_acc_loaded if loaded else m.max_joint_acc
     T, Ta = _time_scale([(dist[-1], m.max_cart_vel, cart_acc)]
                         + [(float(d), v, joint_acc) for d, v in zip(jdist, m.max_joint_vel)])
-    n = int(np.ceil(T / SAMPLE_DT)) + 1
-    s = _profile(T, Ta, n) * dist[-1]
     if dist[-1] <= 0:
-        return JointTrajectory(np.linspace(0, T, n), np.repeat(qs[:1], n, axis=0))
-    return JointTrajectory(np.linspace(0, T, n), CubicSpline(dist, qs)(s))
+        return JointTrajectory(np.array([0.0, T]), np.repeat(qs[:1], 2, axis=0))
+    spline = CubicSpline(dist, qs)
+    for _ in range(4):  # near a singularity the joints move unevenly: slow down until the peak is within the limit
+        n = int(np.ceil(T / SAMPLE_DT)) + 1
+        tr = JointTrajectory(np.linspace(0, T, n), spline(_profile(T, Ta, n) * dist[-1]))
+        peak = np.abs(np.diff(tr.q, n=2, axis=0)).max() / (T / (n - 1)) ** 2 if n > 2 else 0.0
+        if peak <= m.max_joint_acc * 1.1:
+            break
+        k = np.sqrt(peak / m.max_joint_acc)
+        T, Ta = T * k, Ta * k
+    return tr
 
 
 def reverse(tr: JointTrajectory) -> JointTrajectory:

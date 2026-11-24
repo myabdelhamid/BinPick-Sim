@@ -304,3 +304,27 @@ def test_a_part_hidden_under_the_side_of_a_tall_one_is_not_safe(cfg):
         lo, _ = s.bin_inner_bounds()
         near = [t for t in targets(s) if np.linalg.norm(t.pos[:2] - lo[:2] - where) < 0.02]
         assert not any(t.safe for t in near), seed
+
+
+@pytest.mark.parametrize("dia,length", [(0.050, 0.0455), (0.050, 0.047), (0.042, 0.046), (0.060, 0.047)])
+def test_short_lying_cylinder_is_pickable(cfg, dia, length):
+    """Barely longer than the cup: its end edges, like those of a narrow box, must be located from all cells along them."""
+    found = 0
+    for k in range(6):
+        s = single_part_scene(cfg, PartSpec(0, "cylinder", "plastic", (dia, length), 0.2), xy_offset=(0.05, 0.03),
+                              quat=quat_mul(quat_axis_angle([0, 0, 1], 0.5 * k), quat_axis_angle([1, 0, 0], np.pi / 2)))
+        s.data.qpos[s.part_qpos_adr[0] + 2] = s.bin_inner_bounds()[0][2] + dia / 2
+        s.sensor_rng = np.random.default_rng(k)
+        ts = targets(s)
+        if ts:
+            teleport_cup(s, ts[0].pos, -ts[0].normal)
+            found += seal_quality(s, 0) > 0.6
+    assert found >= 5
+
+
+def test_cylinder_shorter_than_the_cup_is_not_a_target(cfg):
+    for k in range(6):
+        s = single_part_scene(cfg, PartSpec(0, "cylinder", "plastic", (0.05, 0.042), 0.2), quat=quat_axis_angle([1, 0, 0], np.pi / 2))
+        s.data.qpos[s.part_qpos_adr[0] + 2] = s.bin_inner_bounds()[0][2] + 0.025
+        s.sensor_rng = np.random.default_rng(k)
+        assert targets(s) == []

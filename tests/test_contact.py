@@ -200,3 +200,34 @@ def test_normal_approaches_are_not_taken_for_contact(cfg):
         for _ in range(100):
             mujoco.mj_step(s.model, s.data)
         assert Supervisor(s, np.random.default_rng(0), seed=0).attempt(oracle_targets(s)[0]).outcome == "success", xy
+
+
+def test_fast_tilted_moves_in_free_air_are_not_taken_for_contact(cfg):
+    """Steep approaches with the arm stretched: large joint accelerations, no contact."""
+    from binpick.motion.collision import CellCheck
+    from binpick.motion.ik import solve_cup_pose
+    from binpick.motion.trajectory import IKError, cartesian_line, joint_move
+
+    s = build_scene(cfg, [])
+    sup = Supervisor(s, np.random.default_rng(0), seed=0)
+    lo, hi = s.bin_inner_bounds()
+    rng, done = np.random.default_rng(5), 0
+    for _ in range(60):
+        az, tilt = rng.uniform(0, 2 * np.pi), np.deg2rad(rng.uniform(25, 60))
+        n = np.array([np.sin(tilt) * np.cos(az), np.sin(tilt) * np.sin(az), np.cos(tilt)])
+        p = np.r_[rng.uniform(lo[:2] + 0.05, hi[:2] - 0.05), lo[2] + rng.uniform(0.1, 0.15)]
+        r = sup._ik_min_motion(p + n * 0.25, -n)
+        if not r.ok:
+            continue
+        try:
+            line = cartesian_line(s, r.q, p + n * 0.25, p, -n, r.yaw, cfg.motion, loaded=False)
+        except IKError:
+            continue
+        move = joint_move(sup._q(), r.q, cfg.motion)
+        if sup.cell.path_hits(move) or sup.cell.path_hits(line):
+            continue
+        sup._guarded(move)  # raises if it feels something
+        sup._guarded(line)
+        sup._to_view()
+        done += 1
+    assert done >= 8

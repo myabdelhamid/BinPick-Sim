@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import numpy as np
 
-from binpick.sim.camera import intrinsics, sense_depth
+from binpick.perception.denoise import smooth_depth
+from binpick.sim.camera import intrinsics
 from binpick.sim.scene import Scene
 
 PLACE_TOL = 0.010        # spec: part center within +-10 mm of the slot center
-VERIFY_MIN_HEIGHT = 0.003
+VERIFY_MIN_HEIGHT = 0.010  # the thinnest part is 20 mm
 VERIFY_INSET = 0.008     # ignore pixels near the slot dividers (8 mm tall)
 VERIFY_MIN_PIXELS = 50
-TOP_BAND = 0.004         # pixels within 4 mm of the highest point in the slot = the part's top face
+TOP_PERCENTILE = 95      # the highest readings are noise
+TOP_BAND = 0.004         # pixels within 4 mm of the top = the part's top face
 
 
 class SlotAllocator:
@@ -40,7 +42,7 @@ def place_yaw(long_axis_cup: np.ndarray) -> float:
 
 
 def _tray_points(scene: Scene) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    depth = sense_depth(scene, "tray_cam")
+    depth = smooth_depth(scene, "tray_cam")
     K = intrinsics(scene, "tray_cam")
     cam = scene.data.cam("tray_cam").xpos
     h, w = depth.shape
@@ -67,7 +69,7 @@ def verify_slot(scene: Scene, slot: int) -> tuple[bool, np.ndarray | None]:
     mask = (np.abs(x - c[0]) < half) & (np.abs(y - c[1]) < half) & (z > c[2] + VERIFY_MIN_HEIGHT)
     if mask.sum() < VERIFY_MIN_PIXELS:
         return False, None
-    mask &= z > z[mask].max() - TOP_BAND  # top face only: side faces seen in perspective bias the centroid
+    mask &= z > np.percentile(z[mask], TOP_PERCENTILE) - TOP_BAND  # top face only: side faces seen in perspective bias the centroid
     if mask.sum() < VERIFY_MIN_PIXELS:
         return False, None
     est = np.array([x[mask].mean(), y[mask].mean()])

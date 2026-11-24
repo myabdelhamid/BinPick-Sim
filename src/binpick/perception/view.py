@@ -8,7 +8,8 @@ import numpy as np
 import open3d as o3d
 from scipy import ndimage
 
-from binpick.sim.camera import intrinsics, sense_depth
+from binpick.perception.denoise import smooth_depth
+from binpick.sim.camera import intrinsics
 from binpick.sim.scene import Scene
 
 NORMAL_SPAN = 2  # cells on each side used for slopes and for comparing neighbouring normals
@@ -25,22 +26,6 @@ def depth_to_cloud(depth: np.ndarray, K: np.ndarray, cam_pos: np.ndarray, cam_R:
         o3d.geometry.Image(np.ascontiguousarray(depth, dtype=np.float32)), k, np.linalg.inv(T),
         depth_scale=1.0, depth_trunc=100.0, project_valid_depth_only=False)
     return np.asarray(pc.points).reshape(h, w, 3).copy()
-
-
-def denoise(depth: np.ndarray, tol: float, reach: int) -> np.ndarray:
-    """Average each reading with the neighbours (reach pixels around) that differ from it by less than tol: random
-    error shrinks, height jumps stay sharp. Missing readings stay missing."""
-    total, count = np.zeros(depth.shape), np.zeros(depth.shape)
-    padded = np.pad(depth.astype(float), reach, constant_values=np.nan)
-    h, w = depth.shape
-    for di in range(2 * reach + 1):
-        for dj in range(2 * reach + 1):
-            nb = padded[di:di + h, dj:dj + w]
-            near = np.abs(nb - depth) < tol
-            total[near] += nb[near]
-            count += near
-    with np.errstate(invalid="ignore"):
-        return np.where(count > 0, total / count, np.nan)
 
 
 def fill_pinholes(z: np.ndarray, max_spread: float) -> np.ndarray:
@@ -143,7 +128,7 @@ def _edges(z: np.ndarray, normals: np.ndarray, cell: float, max_slope: float, cr
 
 def observe_bin(scene: Scene) -> BinView:
     cfg = scene.cfg.perception
-    depth = denoise(sense_depth(scene, "bin_cam"), cfg.smooth_tol, cfg.smooth_reach)
+    depth = smooth_depth(scene, "bin_cam")
     cam = scene.data.cam("bin_cam")
     P = depth_to_cloud(depth, intrinsics(scene, "bin_cam"), cam.xpos, cam.xmat.reshape(3, 3))
     lo, hi = scene.bin_inner_bounds()

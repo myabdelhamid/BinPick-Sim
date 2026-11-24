@@ -27,6 +27,7 @@ PROBE_BLANK_S = 0.12     # contact probing ignores the start of the move (the ar
 PROBE_WINDOW_S = 0.02    # lag is compared with its mean 20-40 ms earlier
 SHAKE_RAMP_S = 0.3
 ARM_HIT_MIN_N = 50.0     # scoring: arm or tool hitting the cell harder than this is a collision
+GUARD_VEL_STEPS = 5      # joint accelerations are taken over this many control steps (10 ms)
 GUARD_STEPS = 5          # an unexplained force must last this many control steps (10 ms)
 SEAL_POLL_STEPS = 10     # read the vacuum sensor every 10 physics steps (20 ms)
 
@@ -93,17 +94,19 @@ class Supervisor:
     def _guarded(self, traj: JointTrajectory) -> None:
         """Move with the empty cup; stop if the joints carry a force on the cup that the motion does not explain."""
         scene, m, d = self.scene, self.scene.model, self.scene.data
-        t0, J, ids = d.time, np.zeros((3, m.nv)), [m.actuator(a).id for a in scene.arm_actuator_names]
-        over = 0
+        J, ids = np.zeros((3, m.nv)), [m.actuator(a).id for a in scene.arm_actuator_names]
+        over, vel = 0, [d.qvel[self._dofs].copy()]
 
         def step(sc: Scene) -> bool:
             nonlocal over
             if not self._on_step(sc):
                 return False
+            vel.append(d.qvel[self._dofs].copy())
+            del vel[:-GUARD_VEL_STEPS - 1]
+            acc = (vel[-1] - vel[0]) / (max(len(vel) - 1, 1) * m.opt.timestep)  # from the joint readings
+            expected = scene.arm_torque(self._q(), vel[-1], acc)
             mujoco.mj_jacSite(m, d, J, None, self._tip)
-            t = d.time - t0
-            acc = traj.acceleration(t) if t < traj.duration else np.zeros(7)
-            f = np.linalg.pinv(J[:, self._dofs].T) @ (d.actuator_force[ids] - scene.arm_inertia(self._q()) @ acc)
+            f = np.linalg.pinv(J[:, self._dofs].T) @ (d.actuator_force[ids] - expected)
             over = over + 1 if np.linalg.norm(f) > scene.cfg.motion.guard_force_n else 0
             return over < GUARD_STEPS
 

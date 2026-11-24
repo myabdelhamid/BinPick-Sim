@@ -250,7 +250,8 @@ class SuctionConfig:
 
 @dataclass(frozen=True)
 class PerceptionConfig:
-    smooth_tol: float
+    smooth_sigmas: float
+    smooth_tol_min: float
     smooth_reach: int
     cell: float
     min_part_height: float
