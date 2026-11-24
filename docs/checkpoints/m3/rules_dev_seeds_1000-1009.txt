@@ -1,0 +1,13 @@
+# commit 7eca2ad: uv run python scripts/dev_bins.py 1000 1010 rules   (development seeds: the robot was tuned on these)
+1000 placed 17/20 attempts 21 shakes 7 stop no_candidate left 3 lost 0 misplaced 0 {'collision': 1, 'seal_lost_lift': 3}
+1002 placed 18/20 attempts 23 shakes 7 stop no_candidate left 2 lost 0 misplaced 0 {'collision': 4, 'seal_lost_lift': 1}
+1003 placed 19/20 attempts 25 shakes 8 stop no_candidate left 1 lost 0 misplaced 0 {'seal_lost_grip': 2, 'collision': 3, 'seal_lost_lift': 1}
+1001 placed 19/20 attempts 33 shakes 11 stop empty left 0 lost 1 misplaced 0 {'collision': 2, 'seal_lost_lift': 7, 'no_seal': 3, 'seal_lost_transport': 2}
+1005 placed 20/20 attempts 23 shakes 5 stop tray_full left 0 lost 0 misplaced 0 {'collision': 1, 'seal_lost_lift': 2}
+1006 placed 18/20 attempts 20 shakes 6 stop no_candidate left 2 lost 0 misplaced 0 {'collision': 2}
+1004 placed 20/20 attempts 29 shakes 5 stop tray_full left 0 lost 0 misplaced 0 {'seal_lost_lift': 5, 'collision': 4}
+1007 placed 17/20 attempts 28 shakes 8 stop no_candidate left 3 lost 0 misplaced 0 {'seal_lost_lift': 4, 'collision': 7}
+1008 placed 19/20 attempts 21 shakes 6 stop no_candidate left 1 lost 0 misplaced 0 {'collision': 2}
+1009 placed 18/20 attempts 26 shakes 11 stop no_candidate left 2 lost 0 misplaced 0 {'collision': 6, 'seal_lost_transport': 1, 'seal_lost_lift': 1}
+rules: success 185/249 = 74.3%  emptied 2/10  placed 185/200  errors []  failures {'collision': 32, 'seal_lost_lift': 24, 'seal_lost_grip': 2, 'no_seal': 3, 'seal_lost_transport': 3}
+cycle: successful picks mean 8.02 s max 9.58 s, over 8 s 85/185; all attempts mean 6.91 s; sim time per placed part incl. shakes 10.7 s

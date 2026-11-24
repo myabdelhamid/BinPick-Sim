@@ -1,0 +1,12 @@
+1102 placed 3/20 attempts 40 shakes 0 stop attempt_limit left 17 lost 0 misplaced 0 {'no_seal': 33, 'collision': 4}
+1103 placed 0/20 attempts 40 shakes 0 stop attempt_limit left 20 lost 0 misplaced 0 {'no_seal': 34, 'collision': 6}
+1101 placed 1/20 attempts 40 shakes 0 stop attempt_limit left 19 lost 0 misplaced 0 {'no_seal': 22, 'collision': 16, 'seal_lost_grip': 1}
+1100 placed 0/20 attempts 40 shakes 0 stop attempt_limit left 20 lost 0 misplaced 0 {'no_seal': 28, 'collision': 12}
+1104 placed 1/20 attempts 40 shakes 0 stop attempt_limit left 18 lost 0 misplaced 1 {'no_seal': 29, 'collision': 10}
+1105 placed 0/20 attempts 40 shakes 0 stop attempt_limit left 20 lost 0 misplaced 0 {'collision': 12, 'no_seal': 26, 'seal_lost_grip': 2}
+1107 placed 1/20 attempts 40 shakes 0 stop attempt_limit left 19 lost 0 misplaced 0 {'no_seal': 25, 'seal_lost_grip': 1, 'collision': 12, 'seal_lost_lift': 1}
+1106 placed 1/20 attempts 40 shakes 0 stop attempt_limit left 19 lost 0 misplaced 0 {'no_seal': 31, 'seal_lost_grip': 1, 'seal_lost_lift': 1, 'collision': 6}
+1108 placed 1/20 attempts 40 shakes 0 stop attempt_limit left 19 lost 0 misplaced 0 {'no_seal': 26, 'collision': 9, 'seal_lost_grip': 2, 'ik_fail': 1, 'seal_lost_lift': 1}
+1109 placed 0/20 attempts 40 shakes 0 stop attempt_limit left 19 lost 0 misplaced 1 {'no_seal': 30, 'seal_lost_grip': 1, 'misplaced': 1, 'collision': 7, 'seal_lost_lift': 1}
+random: success 8/400 = 2.0%  emptied 0/10  placed 8/200  errors []  failures {'no_seal': 284, 'collision': 94, 'seal_lost_grip': 8, 'seal_lost_lift': 4, 'ik_fail': 1, 'misplaced': 1}
+cycle: successful picks mean 8.70 s max 8.99 s, over 8 s 8/8; all attempts mean 3.56 s; sim time per placed part incl. shakes 178.0 s

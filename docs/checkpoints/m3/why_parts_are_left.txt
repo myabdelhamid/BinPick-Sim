@@ -1,0 +1,16 @@
+# parts not placed on fresh seeds (rules): shape, mm, kg, has a face >= 48 mm?, ever tried?
+lip+margin needs 44 mm: no usable face 0.20% of parts, bins affected 4%
+lip+margin needs 45 mm: no usable face 0.35% of parts, bins affected 7%
+lip+margin needs 46 mm: no usable face 1.73% of parts, bins affected 28%
+lip+margin needs 48 mm: no usable face 5.18% of parts, bins affected 64%
+1100 [('box', (np.int64(46), np.int64(64), np.int64(23)), 0.52, 'small', 'never tried'), ('box', (np.int64(47), np.int64(57), np.int64(47)), 0.34, 'small', 'never tried'), ('cyl', (np.int64(45), np.int64(60)), 0.26, '', 'never tried'), ('cyl', (np.int64(41), np.int64(47)), 0.08, 'small', 'never tried'), ('cyl', (np.int64(48), np.int64(67)), 0.15, '', 'never tried')]
+1101 [('box', (np.int64(48), np.int64(51), np.int64(26)), 0.17, 'small', 'never tried'), ('box', (np.int64(51), np.int64(106), np.int64(42)), 0.27, '', 'never tried'), ('cyl', (np.int64(42), np.int64(62)), 0.23, '', 'never tried')]
+1102 [('box', (np.int64(63), np.int64(47), np.int64(50)), 0.4, '', 'never tried'), ('box', (np.int64(46), np.int64(65), np.int64(36)), 0.86, 'small', 'never tried'), ('cyl', (np.int64(42), np.int64(58)), 0.21, '', 'never tried')]
+1103 [('box', (np.int64(83), np.int64(55), np.int64(48)), 1.71, '', 'never tried'), ('cyl', (np.int64(42), np.int64(56)), 0.09, '', 'never tried'), ('cyl', (np.int64(48), np.int64(52)), 0.26, '', 'never tried'), ('cyl', (np.int64(42), np.int64(66)), 0.11, '', 'never tried'), ('cyl', (np.int64(42), np.int64(94)), 0.16, '', 'never tried')]
+1104 [('box', (np.int64(46), np.int64(80), np.int64(42)), 0.19, 'small', 'never tried')]
+1105 [('cyl', (np.int64(59), np.int64(41)), 0.14, '', 'never tried')]
+1106 [('box', (np.int64(106), np.int64(93), np.int64(63)), 1.68, '', 'tried'), ('box', (np.int64(47), np.int64(71), np.int64(43)), 0.38, 'small', 'never tried'), ('cyl', (np.int64(42), np.int64(85)), 0.14, '', 'never tried')]
+1107 [('box', (np.int64(45), np.int64(61), np.int64(44)), 0.15, 'small', 'never tried'), ('cyl', (np.int64(74), np.int64(50)), 1.69, '', 'tried'), ('cyl', (np.int64(43), np.int64(99)), 0.38, '', 'never tried')]
+1108 [('box', (np.int64(45), np.int64(47), np.int64(57)), 0.32, 'small', 'never tried'), ('box', (np.int64(47), np.int64(59), np.int64(30)), 0.1, 'small', 'never tried'), ('cyl', (np.int64(44), np.int64(92)), 0.17, '', 'never tried'), ('cyl', (np.int64(59), np.int64(45)), 0.34, '', 'never tried')]
+1109 [('box', (np.int64(63), np.int64(97), np.int64(23)), 0.17, '', 'tried')]
+not placed 29 of which no face >= 48 mm: 10

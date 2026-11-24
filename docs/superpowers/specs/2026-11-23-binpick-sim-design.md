@@ -98,12 +98,14 @@ MuJoCo's adhesion actuator sticks to anything it touches, so on its own it is un
 - Available hold force = `q × 39.0 N`. 39 N is 4.0 kg static, so only 1.3× the 3 kg rating. **Known limits, not tuned away** (owner, 2026-11-24): measured at current speeds, centered grip, slot 0 (2026-11-24): flat 100 mm box holds 1.75 kg (83% of the grip), 60 mm tall box 1.75 kg (99%), 60 mm cylinder by its end 1.5 kg, cylinder sides (45, 60, 80 mm) 1.25 kg. Heavier than that is lost in lift or transport.
 - Curves follow the B40's 20 mm minimum curve radius. The lip wraps onto the surface; a 40 mm cylinder is the thinnest that seals. **Assumption:** `q` falls linearly to 0.75 at that radius (the sheet gives no force there). Tilt limits are unchanged from M2 because the sheet gives no tilt data. The modelled lip stays 44 mm (B40: 43 mm lip, 46 mm body).
 - The part detaches when the required force exceeds what is available. Required force = weight + inertial load during lift and transport + peel from an off-center grip (moment arm from cup center to the part's center of mass).
-- Failure reasons are logged from the model: `no_seal`, `seal_lost_lift`, `seal_lost_transport`, `misplaced`, `ik_fail`, `collision`, `no_candidate`.
+- Failure reasons are logged from the model: `no_seal`, `seal_lost_grip` (sealed, then broke before the vacuum was confirmed; added in M3), `seal_lost_lift`, `seal_lost_transport`, `misplaced`, `ik_fail`, `collision`, `no_candidate`.
 
 **What the supervisor may see (owner-decided: real sensors only).** The supervisor never reads part poses from the simulator. It gets:
 - a simulated **vacuum-pressure sensor** in the cup, derived from seal quality, with noise and a threshold, as a real cell would have;
 - the **bin camera**, to re-capture after each attempt;
 - the **tray camera**, to check placement in the verify step.
+
+M3 additions (builder's calls, disclosed): the robot also feels contact from its own joint readings lagging its commands (approach and set-down; assumes noise-free encoders and perfect arm gravity compensation), knows the part catalogue's size range, and looks at the whole tray in the verify step so it never places onto a part lying in a slot. An arm or tool contact above 50 N with the cell is scored as a collision. Shake: 25 mm at 4 Hz (1.6 g) for 2 s.
 
 Sim ground truth is used only by the seal physics and by the benchmark referee that scores success.
 
