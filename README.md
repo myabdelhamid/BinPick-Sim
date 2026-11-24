@@ -40,7 +40,7 @@ uv run binpick-demo --seed 1000 --picks 3 --video
 
 Writes `outputs/demo_seed1000/attempts.csv` (one row per attempt: outcome, failure reason, cycle time, time per phase), `events.json` (planning rejections), and `demo.mp4`.
 
-How suction works: the cup seals only if all 16 lip points land on the part and the surface height under the lip varies by less than the bellows can absorb (edges, tilt and curvature break the seal). A sealed cup holds the part; every physics step the grip's real load (tension, peel moment, shear) is compared with what the seal can hold (60 kPa over the cup area, about 74 N, 2.5x the 3 kg rating). Overload breaks the seal and the part falls. The robot only sees a noisy vacuum sensor and the cameras.
+How suction works: the cup seals only if all 16 lip points land on the part and the surface height under the lip varies by less than the bellows can absorb (edges, tilt and curvature break the seal). A sealed cup holds the part; every physics step the grip's real load (tension, peel moment, shear) is compared with what the seal can hold (39 N, the Piab B40 datasheet pull at 60 kPa). Overload breaks the seal and the part falls. The robot only sees a noisy vacuum sensor and the cameras.
 
 ## Look at it interactively (macOS)
 

@@ -105,13 +105,21 @@ MuJoCo's adhesion actuator sticks to anything it touches, so on its own it is un
 - the **bin camera**, to re-capture after each attempt;
 - the **tray camera**, to check placement in the verify step.
 
-M3 additions (builder's calls, disclosed): the robot also feels contact from its own joint readings lagging its commands (approach and set-down; assumes noise-free encoders and perfect arm gravity compensation), knows the part catalogue's size range, and looks at the whole tray in the verify step so it never places onto a part lying in a slot. An arm or tool contact above 50 N with the cell is scored as a collision. Shake: 25 mm at 4 Hz (1.6 g) for 2 s.
+M3 additions (builder's calls, disclosed): the robot also feels contact from its own joint readings lagging its commands (approach and set-down; assumes noise-free encoders and perfect arm gravity compensation), knows the part catalogue's size range, and looks at the whole tray in the verify step so it never places onto a part lying in a slot. An arm or tool contact above 50 N with the cell is scored as a collision. Shake: 25 mm at 4 Hz commanded for 2 s; measured later, the bin really moves about 17 mm (1.1 g, not the 1.6 g first stated).
+
+M4 additions (builder's calls, disclosed):
+- **Depth noise** (both cameras): random error 0.5 mm at 0.65 m growing with distance², 1% of pixels missing, half the pixels next to a jump over 5 mm missing. Between industrial structured light (60–80 µm) and low-cost stereo (up to about 2.6 mm RMS). Errors are independent per pixel, so averaging leaves about 0.2 mm: milder than correlated noise of the same size. No calibration error, no mixed pixels.
+- **Safe picks first** (the order of §8 changes): a pick is safe if nothing taller is seen along the part's outline, the cup is within 3 mm of the surface center and the tilt is at most 5°. Safe comes before flat-before-curved. With no safe pick the bin is shaken (up to 3 times); then risky picks that pass the owner's rules are taken. A run ends with `no_candidate` after 3 shakes in a row without a pick.
+- **Harder shakes** for the second and third in a row (40 mm at 5 Hz commanded, about 24 mm and 2.4 g measured).
+- **Lift:** straight up at 1.5 m/s², 1.5 mm away from a wall the part touches, sideways position held with the joint readings. A part felt to be over 1.2 kg is carried at 2 instead of 3 rad/s².
+- **Joint torques** are used as a sensor (contact on approach, part weight), noise-free like the encoders.
+- **Collision check:** planned approaches are checked against an empty model of the cell. A hit is a planning rejection, not an attempt, for both planners.
 
 Sim ground truth is used only by the seal physics and by the benchmark referee that scores success.
 
 This is what separates good grips from bad ones. Exact formulas and thresholds are designed in M2 and checked against simple physical sanity cases (flat top center → hold; 30° tilt → fail; cylinder side below 40 mm → fail (was 40 mm, changed with the B40 cup)). They are never adjusted to benchmark results.
 
-**Test freeze (owner, 2026-11-24).** From commit 6bba2f3 on, parts (sizes, materials, 1.75 kg limit), cup and contact physics are frozen. Only bug fixes may change them, and each is reported with before and after results. Depth-camera noise (M3/M4, in the original brief) is still to be added. Improvements go into the robot: grasp choice, avoiding pinned parts, slowing for sensed heavy loads, shaking. Seeds 1–25 are not run before M5. The final report must state:
+**Test freeze (owner, 2026-11-24).** From commit 6bba2f3 on, parts (sizes, materials, 1.75 kg limit), cup and contact physics are frozen. Only bug fixes may change them, and each is reported with before and after results. Depth-camera noise (in the original brief) was added in M4. Improvements go into the robot: grasp choice, avoiding pinned parts, slowing for sensed heavy loads, shaking. Seeds 1–25 are not run before M5. The final report must state:
 - how 1.75 kg was chosen: after seeing heavier parts drop, and justified afterwards (Schmalz safety factors 1.5 and 2.0 give 2.1 and 1.6 kg for a straight vertical lift at 2.5 m/s²; sideways transport lowers both). It redraws about 4% of parts compared with 2.5 kg;
 - the mass-by-shape limits above;
 - that no manufacturer part weights were available. Ask the founder for them before M5.
