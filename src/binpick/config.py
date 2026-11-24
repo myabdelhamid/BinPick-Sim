@@ -223,6 +223,20 @@ class SuctionConfig:
 
 
 @dataclass(frozen=True)
+class PerceptionConfig:
+    cell: float
+    min_part_height: float
+    wall_margin: float
+    max_slope: float
+    crease_deg: float
+    min_surface_mm2: float
+    empty_mm2: float
+
+    def __post_init__(self):
+        _positive(self, "cell", "min_part_height", "max_slope", "crease_deg", "min_surface_mm2", "empty_mm2")
+
+
+@dataclass(frozen=True)
 class Config:
     seed: int
     parts: PartsConfig
@@ -237,6 +251,7 @@ class Config:
     motion: MotionConfig
     timing: TimingConfig
     suction: SuctionConfig
+    perception: PerceptionConfig
 
 
 def load_config(path: str | Path | None = None) -> Config:
@@ -261,4 +276,5 @@ def load_config(path: str | Path | None = None) -> Config:
         motion=MotionConfig(**raw["motion"]),
         timing=TimingConfig(**raw["timing"]),
         suction=SuctionConfig(**raw["suction"]),
+        perception=PerceptionConfig(**raw["perception"]),
     )

@@ -42,8 +42,8 @@ def verify_slot(scene: Scene, slot: int) -> tuple[bool, np.ndarray | None]:
     cam = scene.data.cam("tray_cam").xpos
     h, w = depth.shape
     v, u = np.mgrid[0:h, 0:w]
-    x = cam[0] + (u - K[0, 2]) * depth / K[0, 0]
-    y = cam[1] - (v - K[1, 2]) * depth / K[1, 1]
+    x = cam[0] + (u + 0.5 - K[0, 2]) * depth / K[0, 0]
+    y = cam[1] - (v + 0.5 - K[1, 2]) * depth / K[1, 1]
     z = cam[2] - depth
     c = scene.slot_centers[slot]
     half = scene.cfg.tray.slot / 2 - VERIFY_INSET

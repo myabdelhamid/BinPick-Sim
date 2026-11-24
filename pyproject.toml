@@ -12,6 +12,7 @@ dependencies = [
     "pillow>=10",
     "imageio>=2.34",
     "imageio-ffmpeg>=0.8.1",
+    "scipy>=1.11",
 ]
 
 [project.scripts]

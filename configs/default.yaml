@@ -106,3 +106,12 @@ suction:
   lost_threshold_kpa: 20.0       # hysteresis: grip lost only above -20 kPa ...
   lost_debounce_polls: 3         # ... on 3 consecutive 20 ms readings (one noisy sample is not a drop)
   sensor_noise_kpa: 1.0
+
+perception:
+  cell: 0.001                    # height-map cell (camera pixels are 0.75-1.05 mm apart)
+  min_part_height: 0.008         # above the bin floor = part (thinnest part is 20 mm)
+  wall_margin: 0.003             # ignore cells this close to the walls
+  max_slope: 3.0                 # height change per length that counts as a jump (72 deg, as the seal model)
+  crease_deg: 40.0               # surface direction change over 4 mm that separates two faces
+  min_surface_mm2: 150.0         # smaller patches are ignored
+  empty_mm2: 200.0               # less visible part area than this = empty bin (smallest face: 900 mm2)
