@@ -5,27 +5,16 @@ Reads part poses from the simulator. Only this module and the referee may do tha
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import mujoco
 import numpy as np
 
+from binpick.planning.types import GraspTarget
 from binpick.sim.scene import Scene
 from binpick.sim.suction import wrapped_lip
 
 MAX_TILT_DEG = 20.0
 EDGE_MARGIN = 0.002        # face must exceed the cup by this on each side
 OCCLUSION_RAY_LEN = 0.3
-
-
-@dataclass(frozen=True)
-class GraspTarget:
-    part_index: int
-    pos: np.ndarray        # suction point on the face (world)
-    normal: np.ndarray     # outward face normal (world); the cup approaches along -normal
-    tilt_deg: float        # angle between normal and world +z
-    depth: float           # part thickness along the normal (for place height)
-    long_axis: np.ndarray  # longest in-face direction (world, unit), for slot alignment
 
 
 def _faces(scene: Scene, i: int):

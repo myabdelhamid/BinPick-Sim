@@ -237,6 +237,26 @@ class PerceptionConfig:
 
 
 @dataclass(frozen=True)
+class PlannerConfig:
+    candidate_step: float
+    edge_margin: float
+    max_tilt_deg: float
+    wall_clearance: float
+    obstacle_height: float
+    obstacle_clearance: float
+    flat_drop: float
+    per_surface: int
+    w_height: float
+    w_seal: float
+    w_wall: float
+    w_center: float
+    wall_saturation: float
+
+    def __post_init__(self):
+        _positive(self, "candidate_step", "max_tilt_deg", "per_surface", "wall_saturation")
+
+
+@dataclass(frozen=True)
 class Config:
     seed: int
     parts: PartsConfig
@@ -252,6 +272,7 @@ class Config:
     timing: TimingConfig
     suction: SuctionConfig
     perception: PerceptionConfig
+    planner: PlannerConfig
 
 
 def load_config(path: str | Path | None = None) -> Config:
@@ -277,4 +298,5 @@ def load_config(path: str | Path | None = None) -> Config:
         timing=TimingConfig(**raw["timing"]),
         suction=SuctionConfig(**raw["suction"]),
         perception=PerceptionConfig(**raw["perception"]),
+        planner=PlannerConfig(**raw["planner"]),
     )

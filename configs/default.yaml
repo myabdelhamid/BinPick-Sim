@@ -115,3 +115,18 @@ perception:
   crease_deg: 40.0               # surface direction change over 4 mm that separates two faces
   min_surface_mm2: 150.0         # smaller patches are ignored
   empty_mm2: 200.0               # less visible part area than this = empty bin (smallest face: 900 mm2)
+
+planner:
+  candidate_step: 0.004          # candidate grid on visible surfaces
+  edge_margin: 0.002             # the surface must extend this far beyond the cup lip
+  max_tilt_deg: 20.0             # owner rule
+  wall_clearance: 0.004          # cup edge to wall
+  obstacle_height: 0.004         # taller than this above the cup plane ...
+  obstacle_clearance: 0.003      # ... within this of the cup edge blocks the point
+  flat_drop: 0.0015              # lip drop below this counts as flat (flat before curved)
+  per_surface: 3                 # candidates kept per surface (fallbacks if the arm cannot reach one)
+  w_height: 1.0                  # score weights
+  w_seal: 0.5
+  w_wall: 0.2
+  w_center: 0.5                  # penalty per cup radius away from the surface center
+  wall_saturation: 0.08          # wall distance beyond this gives no extra score
