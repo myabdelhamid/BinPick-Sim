@@ -171,6 +171,9 @@ class MotionConfig:
     clear_above_rim: float
     place_clearance: float
     retreat_dist: float
+    touch_start: float
+    touch_past: float
+    touch_speed: float
     probe_speed: float
     probe_lag: float
     probe_past: float

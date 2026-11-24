@@ -80,6 +80,9 @@ motion:
   clear_above_rim: 0.05          # transport height margin above rim + part height
   place_clearance: 0.005         # part's lowest point above tray surface at release
   retreat_dist: 0.10
+  touch_start: 0.012             # slow down this far before the surface and feel for contact
+  touch_past: 0.006              # give up this far past where the surface should be
+  touch_speed: 0.05              # m/s
   probe_speed: 0.08              # m/s, feeling for the tray (part height is not visible from above)
   probe_lag: 0.00015             # m, extra tip lag that means contact (free-motion lag is steady within 0.02 mm)
   probe_past: 0.004              # stop this far below where the thinnest part would touch

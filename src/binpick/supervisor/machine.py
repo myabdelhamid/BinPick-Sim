@@ -72,9 +72,6 @@ class Supervisor:
     def _run(self, traj: JointTrajectory, hold_s: float | None = None) -> bool:
         return execute(self.scene, traj, self._on_step, hold_s=hold_s)
 
-    def _run_steps(self, traj: JointTrajectory, on_step: Callable[[Scene], bool]) -> bool:
-        return execute(self.scene, traj, on_step)
-
     def _wait(self, seconds: float) -> None:
         q = self._q()
         self._run(JointTrajectory(np.array([0.0]), q[None, :]), hold_s=seconds)
@@ -152,7 +149,9 @@ class Supervisor:
         self.last_target, self._clear = target, False
         try:
             phase("approach", lambda: (self._run(joint_move(self._q(), plan["hover_q"], cfg.motion)),
-                                       self._run(plan["approach"])))
+                                       self._run(plan["approach"]),
+                                       self._probe(plan["near"], target.pos - n * cfg.motion.touch_past, -n, plan["yaw"],
+                                                   cfg.motion.touch_speed, loaded=False)))
             self._grip(phase, rec)
             self._lift_transport_place(phase, rec, target, n)
             phase("release", lambda: (self.cup.off(), self._wait(cfg.timing.release_s)))
@@ -186,13 +185,14 @@ class Supervisor:
 
     def _plan_approach(self, t: GraspTarget) -> dict:
         cfg, n = self.scene.cfg, np.asarray(t.normal, float)
-        grip = t.pos - n * cfg.motion.approach_overtravel
+        near = t.pos + n * cfg.motion.touch_start
         hover_dist = max(cfg.motion.pregrasp_dist, (self._rim() + HOVER_ABOVE_RIM - t.pos[2]) / max(n[2], 0.2))
         hover = t.pos + n * hover_dist
         r = self._ik_min_motion(hover, -n)
         if not r.ok:
             raise IKError("hover unreachable")
-        return {"hover_q": r.q, "approach": cartesian_line(self.scene, r.q, hover, grip, -n, r.yaw, cfg.motion, loaded=False)}
+        return {"hover_q": r.q, "approach": cartesian_line(self.scene, r.q, hover, near, -n, r.yaw, cfg.motion, loaded=False),
+                "near": near, "yaw": r.yaw}
 
     def _truth_part(self, t: GraspTarget) -> int | None:
         """Ground truth, for the log only: which part lies under the chosen point."""
@@ -265,27 +265,38 @@ class Supervisor:
 
         phase("place", place)
 
-    def _set_down(self, xy: np.ndarray, z_top: float, tray_z: float) -> None:
-        """Lower the part until it touches the tray. The camera cannot see its thickness, so contact is felt: the
-        arm's own joint readings start to lag behind the commanded joints."""
-        scene, m = self.scene, self.scene.cfg.motion
-        z_end = tray_z + min(scene.cfg.parts.box_height[0], scene.cfg.parts.cyl_diameter[0]) - m.probe_past
-        slow = dataclasses.replace(m, max_cart_vel=m.probe_speed)
-        tr = cartesian_line(scene, self._q(), np.r_[xy, z_top], np.r_[xy, z_end], DOWN, self._place_yaw, slow)
+    def _probe(self, p0: np.ndarray, p1: np.ndarray, axis: np.ndarray, yaw: float, speed: float,
+               loaded: bool) -> tuple[bool, bool]:
+        """Move slowly from p0 toward p1 until contact is felt: the arm's own joint readings start to lag behind the
+        commanded joints along `axis`. Returns (completed or touched, touched)."""
+        scene = self.scene
+        m = dataclasses.replace(scene.cfg.motion, max_cart_vel=speed)
+        tr = cartesian_line(scene, self._q(), p0, p1, axis, yaw, m, loaded=loaded)
         t0, J, lags, touched = scene.data.time, np.zeros((3, scene.model.nv)), [], []
+        axis = np.asarray(axis, float)
+        k, blank = int(PROBE_WINDOW_S / scene.model.opt.timestep), PROBE_BLANK_S / scene.model.opt.timestep
 
         def step(sc: Scene) -> bool:
             if not self._on_step(sc):
                 return False
             mujoco.mj_jacSite(sc.model, sc.data, J, None, self._tip)
-            lags.append(-J[2, self._dofs] @ (tr.sample(sc.data.time - t0) - self._q()))  # tip above its command, m
-            k = int(PROBE_WINDOW_S / sc.model.opt.timestep)
-            if len(lags) > PROBE_BLANK_S / sc.model.opt.timestep and lags[-1] - np.mean(lags[-2 * k:-k]) > m.probe_lag:
+            lags.append(axis @ J[:, self._dofs] @ (tr.sample(sc.data.time - t0) - self._q()))
+            if len(lags) > blank and lags[-1] - np.mean(lags[-2 * k:-k]) > m.probe_lag:
                 touched.append(True)
                 return False
             return True
 
-        if not self._run_steps(tr, step) and not touched:
+        done = execute(scene, tr, step)
+        if touched:
+            self._wait(scene.cfg.motion.settle_after_move_s)  # come to rest; the next hold then starts unloaded
+        return done or bool(touched), bool(touched)
+
+    def _set_down(self, xy: np.ndarray, z_top: float, tray_z: float) -> None:
+        """Lower the part until it touches the tray (the camera cannot see its thickness)."""
+        m, parts = self.scene.cfg.motion, self.scene.cfg.parts
+        z_end = tray_z + min(parts.box_height[0], parts.cyl_diameter[0]) - m.probe_past
+        ok, _ = self._probe(np.r_[xy, z_top], np.r_[xy, z_end], DOWN, self._place_yaw, m.probe_speed, loaded=True)
+        if not ok:
             raise _Abort("seal_lost_transport")
 
     def _slot_after_failure(self, rec: AttemptRecord) -> None:
