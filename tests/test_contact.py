@@ -112,3 +112,25 @@ def test_cup_touches_gently_even_if_the_height_estimate_is_off(cfg, err_mm):
     r = Supervisor(s, np.random.default_rng(0), seed=0, observer=obs).attempt(t)
     assert r.outcome == "success", r
     assert push[0] < 12.0, push[0]  # N when the vacuum is switched on (a fixed 2 mm press gives 30 N)
+
+
+def test_view_pose_resets_the_arm_posture(cfg):
+    """Every cycle starts from the same joints, so IK seeding cannot drift into an awkward posture."""
+    s = build_scene(cfg, [])
+    sup = Supervisor(s, np.random.default_rng(0), seed=0)
+    sup._to_view()
+    q1 = sup._q()
+    from binpick.motion.trajectory import joint_move
+    sup._run(joint_move(sup._q(), sup._q() + [0.5, -0.4, 0.7, -0.5, 0.6, 0.4, -0.8], cfg.motion))
+    sup._to_view()
+    assert np.abs(sup._q() - q1).max() < 0.01
+
+
+def test_ik_recovers_from_an_awkward_posture(cfg, monkeypatch):
+    s = build_scene(cfg, [])
+    sup = Supervisor(s, np.random.default_rng(0), seed=0)
+    bad = np.array([2.5, 1.2, -2.5, -0.4, 2.5, 3.4, 2.5])  # wound-up arm: seeding IK from here does not converge
+    monkeypatch.setattr(sup, "_q", lambda: bad.copy())
+    from binpick.motion.ik import DOWN
+    assert sup._ik_min_motion(np.array([0.55, 0.0, 0.35]), DOWN).ok
+    assert sup._ik_min_motion(np.array([0.2, 0.5, 0.35]), DOWN, 0.4).ok

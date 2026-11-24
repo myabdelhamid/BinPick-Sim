@@ -50,6 +50,9 @@ class Supervisor:
         self._watch_seal = False
         self._low_polls = 0
         self._k = 0
+        r = solve_cup_pose(scene, np.asarray(cfg.layout.view_pos), DOWN, 0.0)
+        assert r.ok, "layout.view_pos is unreachable"
+        self._view_q = r.q
         self._clear = True  # arm out of both cameras' view (parked at start)
         self._tip = scene.model.site(scene.cup_site).id
         self._dofs = [int(scene.model.joint(j).dofadr[0]) for j in scene.arm_joint_names]
@@ -91,7 +94,10 @@ class Supervisor:
         q0[0] += d_theta
         if yaw is None:
             yaw = float(np.arctan2(R[1, 0], R[0, 0])) + d_theta
-        return solve_cup_pose(self.scene, np.asarray(pos, float), np.asarray(axis, float), yaw, q0=q0)
+        r = solve_cup_pose(self.scene, np.asarray(pos, float), np.asarray(axis, float), yaw, q0=q0)
+        if not r.ok:  # the current posture is a bad start: try the standard one
+            r = solve_cup_pose(self.scene, np.asarray(pos, float), np.asarray(axis, float), yaw)
+        return r
 
     def _cup_pose(self) -> tuple[np.ndarray, np.ndarray]:
         site = self.scene.data.site(self.scene.cup_site)
@@ -309,12 +315,8 @@ class Supervisor:
     _pending_slot: int | None = None
 
     def _to_view(self) -> None:
-        """Move to the pose that is in neither camera's view."""
-        pos = np.asarray(self.scene.cfg.layout.view_pos)
-        r = self._ik_min_motion(pos, DOWN)
-        if not r.ok:  # from an awkward pose: any solution will do
-            r = solve_cup_pose(self.scene, pos, DOWN, 0.0)
-        self._run(joint_move(self._q(), r.q, self.scene.cfg.motion))
+        """Move to the pose that is in neither camera's view: always the same joints, so posture cannot drift."""
+        self._run(joint_move(self._q(), self._view_q, self.scene.cfg.motion))
         self._clear = True
 
     def _grasp_yaw(self) -> float:
