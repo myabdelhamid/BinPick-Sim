@@ -55,7 +55,8 @@ settle:
 layout:
   robot_base_pos: [0.0, 0.0, 0.0]
   bin_center_xy: [0.55, 0.0]
-  tray_center_xy: [0.0, 0.45]      # far row reachable at transport height (0.43-0.47 works)
+  tray_center_xy: [0.0, 0.47]      # far row reachable at transport height, near row clear of the base (0.46-0.48)
+  view_pos: [0.39, 0.22, 0.45]   # cup here (pointing down): arm in neither camera's view
   table_height: 0.0              # bin outer bottom / tray base z
 
 sim:
@@ -78,6 +79,9 @@ motion:
   clear_above_rim: 0.05          # transport height margin above rim + part height
   place_clearance: 0.005         # part's lowest point above tray surface at release
   retreat_dist: 0.10
+  probe_speed: 0.08              # m/s, feeling for the tray (part height is not visible from above)
+  probe_lag: 0.00015             # m, extra tip lag that means contact (free-motion lag is steady within 0.02 mm)
+  probe_past: 0.004              # stop this far below where the thinnest part would touch
   settle_after_move_s: 0.03      # hold at the end of each move (velocity feed-forward keeps lag small)
 
 timing:                          # sim-time costs of non-motion phases (real cells pay these too)

@@ -7,21 +7,23 @@ the cameras. Ground truth is used only by the referee (scoring) and the lost-par
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 
 import mujoco
 import numpy as np
 
-from binpick.motion.ik import DOWN, solve_cup_pose, yaw_of
+from binpick.motion.ik import DOWN, cup_rotation, solve_cup_pose, yaw_of
 from binpick.motion.trajectory import IKError, JointTrajectory, cartesian_line, execute, joint_move
-from binpick.planning.oracle import GraspTarget
+from binpick.planning.types import GraspTarget
 from binpick.sim.scene import PARK_X0, Scene
 from binpick.sim.suction import SuctionCup
 from binpick.supervisor.placement import SlotAllocator, place_yaw, referee_in_slot, verify_slot
 from binpick.supervisor.records import AttemptRecord
 
 HOVER_ABOVE_RIM = 0.10   # approach lines start at least this far above the bin rim
-READY_ABOVE_RIM = 0.25   # ready pose: cup down over the bin center; out of the tray camera's view
+PROBE_BLANK_S = 0.12     # contact probing ignores the start of the move (the arm is still speeding up)
+PROBE_WINDOW_S = 0.02    # lag is compared with its mean 20-40 ms earlier
 SEAL_POLL_STEPS = 10     # read the vacuum sensor every 10 physics steps (20 ms)
 
 Observer = Callable[[Scene, str], None]
@@ -42,11 +44,13 @@ class Supervisor:
         self.events: list[dict] = []
         self.lost: set[int] = set()
         self._phase = "idle"
+        self.n_candidates = 0  # targets offered by the planner in the last attempt
         self._watch_seal = False
         self._low_polls = 0
         self._k = 0
-        lo, hi = scene.bin_inner_bounds()
-        self.ready_pos = np.r_[(lo[:2] + hi[:2]) / 2, hi[2] + READY_ABOVE_RIM]
+        self._clear = True  # arm out of both cameras' view (parked at start)
+        self._tip = scene.model.site(scene.cup_site).id
+        self._dofs = [int(scene.model.joint(j).dofadr[0]) for j in scene.arm_joint_names]
 
     # ---- low level -------------------------------------------------------------------------
     def _q(self) -> np.ndarray:
@@ -65,6 +69,9 @@ class Supervisor:
 
     def _run(self, traj: JointTrajectory, hold_s: float | None = None) -> bool:
         return execute(self.scene, traj, self._on_step, hold_s=hold_s)
+
+    def _run_steps(self, traj: JointTrajectory, on_step: Callable[[Scene], bool]) -> bool:
+        return execute(self.scene, traj, on_step)
 
     def _wait(self, seconds: float) -> None:
         q = self._q()
@@ -95,9 +102,10 @@ class Supervisor:
         return float(self.scene.bin_inner_bounds()[1][2])
 
     # ---- one attempt -----------------------------------------------------------------------
-    def attempt(self, target: GraspTarget) -> AttemptRecord | None:
-        """Run one pick-and-place. Returns None if planning rejects the target before any motion
-        (not an attempt, logged in `events`)."""
+    def attempt(self, targets: GraspTarget | Callable[[], list[GraspTarget]]) -> AttemptRecord | None:
+        """Run one pick-and-place. `targets` is one target, or a planner call made once the cameras are clear
+        that returns targets in order of preference; the first the arm can reach is used. Returns None if none
+        is (planning rejections are not attempts; they are logged in `events`)."""
         scene, cfg, d = self.scene, self.scene.cfg, self.scene.data
         t0 = d.time
         times: dict[str, float] = {}
@@ -110,33 +118,37 @@ class Supervisor:
             finally:
                 times[name] = times.get(name, 0.0) + d.time - ts
 
-        phase("capture", lambda: self._wait(cfg.timing.capture_s))
+        def capture():
+            if not self._clear:
+                self._to_view()
+            self._wait(cfg.timing.capture_s)
+
+        phase("capture", capture)
 
         # ---- plan: everything up to the grip must be feasible before the arm moves
-        n = np.asarray(target.normal, float)
-        axis = -n
-        grip = target.pos - n * cfg.motion.approach_overtravel
-        hover_dist = max(cfg.motion.pregrasp_dist, (self._rim() + HOVER_ABOVE_RIM - target.pos[2]) / max(n[2], 0.2))
-        hover = target.pos + n * hover_dist
-        plan = {}
+        plan: dict = {}
 
         def do_plan():
+            candidates = [targets] if isinstance(targets, GraspTarget) else targets()
+            self.n_candidates = len(candidates)
             self._wait(cfg.timing.plan_s)
-            r = self._ik_min_motion(hover, axis)
-            if not r.ok:
-                raise IKError("hover unreachable")
-            plan["hover_q"], plan["yaw"] = r.q, r.yaw
-            plan["approach"] = cartesian_line(scene, r.q, hover, grip, axis, r.yaw, cfg.motion, loaded=False)
+            for t in candidates:
+                try:
+                    plan.update(self._plan_approach(t), target=t)
+                    return
+                except IKError as e:
+                    self.events.append({"seed": self.seed, "time": d.time, "event": "plan_rejected", "detail": str(e)})
 
-        try:
-            phase("plan", do_plan)
-        except IKError as e:
-            self.events.append({"seed": self.seed, "time": d.time, "event": "plan_rejected",
-                                "target_part": target.part_index, "detail": str(e)})
+        phase("plan", do_plan)
+        if not plan:
             return None
+        target: GraspTarget = plan["target"]
+        n = np.asarray(target.normal, float)
 
-        rec = AttemptRecord(self.seed, len(self.records) + 1, target.part_index)
+        rec = AttemptRecord(self.seed, len(self.records) + 1, self._truth_part(target), tilt_deg=target.tilt_deg,
+                            est_seal=target.seal)
         self.records.append(rec)
+        self._clear = False
         try:
             phase("approach", lambda: (self._run(joint_move(self._q(), plan["hover_q"], cfg.motion)),
                                        self._run(plan["approach"])))
@@ -148,7 +160,7 @@ class Supervisor:
             p, _ = self._cup_pose()
             phase("retreat", lambda: (self._run(self._line(p, p + [0, 0, cfg.motion.retreat_dist], DOWN,
                                                              self._place_yaw, loaded=False)),
-                                      self._to_ready()))
+                                      self._to_view()))
 
             def verify():
                 self._wait(cfg.timing.verify_s)
@@ -170,6 +182,24 @@ class Supervisor:
         self._phase = "idle"
         return rec
 
+    def _plan_approach(self, t: GraspTarget) -> dict:
+        cfg, n = self.scene.cfg, np.asarray(t.normal, float)
+        grip = t.pos - n * cfg.motion.approach_overtravel
+        hover_dist = max(cfg.motion.pregrasp_dist, (self._rim() + HOVER_ABOVE_RIM - t.pos[2]) / max(n[2], 0.2))
+        hover = t.pos + n * hover_dist
+        r = self._ik_min_motion(hover, -n)
+        if not r.ok:
+            raise IKError("hover unreachable")
+        return {"hover_q": r.q, "approach": cartesian_line(self.scene, r.q, hover, grip, -n, r.yaw, cfg.motion, loaded=False)}
+
+    def _truth_part(self, t: GraspTarget) -> int | None:
+        """Ground truth, for the log only: which part lies under the chosen point."""
+        geom = np.array([-1], dtype=np.int32)
+        mujoco.mj_ray(self.scene.model, self.scene.data, t.pos + 0.003 * t.normal, -np.asarray(t.normal, float), None, 1,
+                      -1, geom)
+        body = int(self.scene.model.geom_bodyid[geom[0]]) if geom[0] >= 0 else -1
+        return self.scene.part_body_ids.index(body) if body in self.scene.part_body_ids else None
+
     def _grip(self, phase, rec: AttemptRecord) -> None:
         cfg = self.scene.cfg
 
@@ -186,6 +216,8 @@ class Supervisor:
         cfg, scene = self.scene.cfg, self.scene
         p_grip, R_grip = self._cup_pose()
         long_cup = R_grip.T @ target.long_axis
+        center = target.pos if target.center is None else target.center
+        offset_cup = R_grip.T @ (center - target.pos)  # from the cup to the part's estimated center
         clear_z = self._rim() + target.depth + cfg.motion.clear_above_rim
 
         def lift():
@@ -204,25 +236,55 @@ class Supervisor:
         self._pending_slot = slot  # used up only on release (or if a failed part ends up lying in it)
         slot_c = scene.slot_centers[slot]
         self._place_yaw = place_yaw(long_cup)
-        release_p = slot_c + [0, 0, cfg.motion.place_clearance + target.depth]
-        pre_place = np.r_[slot_c[:2], max(clear_z, release_p[2] + cfg.motion.pregrasp_dist)]
+        top = slot_c[2] + target.depth + cfg.motion.place_clearance  # cup height that surely clears the tray
+        pre_z = max(clear_z, top + cfg.motion.pregrasp_dist)
+        xy = {}
 
         def transport():
-            r = self._ik_min_motion(pre_place, DOWN, self._place_yaw)
+            # the part's center, not the cup, goes to the slot center (the wrist may turn by pi, so solve twice)
+            at = lambda yaw: slot_c[:2] - (cup_rotation(DOWN, yaw) @ np.r_[offset_cup[:2], 0.0])[:2]  # noqa: E731
+            r = self._ik_min_motion(np.r_[at(self._place_yaw), pre_z], DOWN, self._place_yaw)
+            if r.ok:
+                r = self._ik_min_motion(np.r_[at(r.yaw), pre_z], DOWN, r.yaw)
             if not r.ok:
                 raise IKError("pre-place unreachable")
-            self._place_yaw = r.yaw
+            self._place_yaw, xy["cup"] = r.yaw, at(r.yaw)
             if not self._run(joint_move(self._q(), r.q, cfg.motion, loaded=True)):
                 raise _Abort("seal_lost_transport")
 
         phase("transport", transport)
 
         def place():
-            if not self._run(self._line(pre_place, release_p, DOWN, self._place_yaw)):
+            c = xy["cup"]
+            if not self._run(self._line(np.r_[c, pre_z], np.r_[c, top], DOWN, self._place_yaw)):
                 raise _Abort("seal_lost_transport")
+            self._set_down(c, top, slot_c[2])
             self._watch_seal = False
 
         phase("place", place)
+
+    def _set_down(self, xy: np.ndarray, z_top: float, tray_z: float) -> None:
+        """Lower the part until it touches the tray. The camera cannot see its thickness, so contact is felt: the
+        arm's own joint readings start to lag behind the commanded joints."""
+        scene, m = self.scene, self.scene.cfg.motion
+        z_end = tray_z + min(scene.cfg.parts.box_height[0], scene.cfg.parts.cyl_diameter[0]) - m.probe_past
+        slow = dataclasses.replace(m, max_cart_vel=m.probe_speed)
+        tr = cartesian_line(scene, self._q(), np.r_[xy, z_top], np.r_[xy, z_end], DOWN, self._place_yaw, slow)
+        t0, J, lags, touched = scene.data.time, np.zeros((3, scene.model.nv)), [], []
+
+        def step(sc: Scene) -> bool:
+            if not self._on_step(sc):
+                return False
+            mujoco.mj_jacSite(sc.model, sc.data, J, None, self._tip)
+            lags.append(-J[2, self._dofs] @ (tr.sample(sc.data.time - t0) - self._q()))  # tip above its command, m
+            k = int(PROBE_WINDOW_S / sc.model.opt.timestep)
+            if len(lags) > PROBE_BLANK_S / sc.model.opt.timestep and lags[-1] - np.mean(lags[-2 * k:-k]) > m.probe_lag:
+                touched.append(True)
+                return False
+            return True
+
+        if not self._run_steps(tr, step) and not touched:
+            raise _Abort("seal_lost_transport")
 
     def _slot_after_failure(self, rec: AttemptRecord) -> None:
         """A failed part seen lying in the pending slot (tray camera) uses that slot up."""
@@ -233,11 +295,14 @@ class Supervisor:
 
     _pending_slot: int | None = None
 
-    def _to_ready(self) -> None:
-        r = self._ik_min_motion(self.ready_pos, DOWN)
-        if not r.ok:
-            raise IKError("ready pose unreachable")
+    def _to_view(self) -> None:
+        """Move to the pose that is in neither camera's view."""
+        pos = np.asarray(self.scene.cfg.layout.view_pos)
+        r = self._ik_min_motion(pos, DOWN)
+        if not r.ok:  # from an awkward pose: any solution will do
+            r = solve_cup_pose(self.scene, pos, DOWN, 0.0)
         self._run(joint_move(self._q(), r.q, self.scene.cfg.motion))
+        self._clear = True
 
     def _grasp_yaw(self) -> float:
         return yaw_of(self._cup_pose()[1])
@@ -257,6 +322,7 @@ class Supervisor:
                 self._run(self._line(p, up, R[:, 2], yaw_of(R), loaded=False))
             except IKError:
                 self._wait(0.2)
+            self._to_view()
 
         phase("retreat", retreat)
 

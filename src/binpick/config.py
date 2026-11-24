@@ -132,10 +132,11 @@ class LayoutConfig:
     robot_base_pos: tuple[float, float, float]
     bin_center_xy: tuple[float, float]
     tray_center_xy: tuple[float, float]
+    view_pos: tuple[float, float, float]
     table_height: float
 
     def __post_init__(self):
-        for n in ("robot_base_pos", "bin_center_xy", "tray_center_xy"):
+        for n in ("robot_base_pos", "bin_center_xy", "tray_center_xy", "view_pos"):
             object.__setattr__(self, n, tuple(float(x) for x in getattr(self, n)))
 
 
@@ -169,6 +170,9 @@ class MotionConfig:
     clear_above_rim: float
     place_clearance: float
     retreat_dist: float
+    probe_speed: float
+    probe_lag: float
+    probe_past: float
     settle_after_move_s: float
 
     def __post_init__(self):
@@ -176,7 +180,7 @@ class MotionConfig:
         if len(self.max_joint_vel) != 7 or min(self.max_joint_vel) <= 0:
             raise ValueError("max_joint_vel: need 7 positive values")
         _positive(self, "max_joint_acc", "max_joint_acc_loaded", "max_cart_vel", "max_cart_acc",
-                  "max_cart_acc_empty", "cart_step", "pregrasp_dist", "lift_dist", "retreat_dist")
+                  "max_cart_acc_empty", "cart_step", "pregrasp_dist", "lift_dist", "retreat_dist", "probe_speed", "probe_lag")
 
 
 @dataclass(frozen=True)
