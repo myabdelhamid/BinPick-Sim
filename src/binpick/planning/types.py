@@ -18,3 +18,5 @@ class GraspTarget:
     center: np.ndarray | None = None  # estimated center of the gripped surface (world); None = at pos
     seal: float = 1.0       # estimated seal quality
     score: float = 0.0
+    crowd: float = 0.0      # share of the surface's outline with something taller next to it
+    safe: bool = True       # free, centered and level as far as the camera can tell

@@ -1,3 +1,4 @@
+import dataclasses
 import json
 
 import mujoco
@@ -84,23 +85,14 @@ def test_failing_attempts_run_to_the_attempt_limit(cfg, monkeypatch):
     assert r.stop == "attempt_limit" and len(r.records) == 8
 
 
-def test_another_spot_on_the_same_surface_is_tried_before_shaking(cfg, monkeypatch):
+def test_a_failed_grip_waits_for_a_shake_unless_another_safe_pick_is_left(cfg, monkeypatch):
+    """The only other spots on the same surface are off-center: risky."""
     from binpick.supervisor import machine
 
     s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.11, 0.11, 0.03), 0.4))
-    spots = []
     monkeypatch.setattr(machine.SuctionCup, "sealed", lambda self: False)
-    real = machine.Supervisor.attempt
-
-    def attempt(self, targets):
-        rec = real(self, targets)
-        if rec is not None:
-            spots.append(self.last_target.pos)
-        return rec
-
-    monkeypatch.setattr(machine.Supervisor, "attempt", attempt)
     r = run_bin(s, "rules", seed=0, max_attempts=2)
-    assert r.shakes == 0 and np.linalg.norm(spots[1] - spots[0]) > cfg.run.avoid_radius
+    assert r.shakes == 1 and len(r.records) == 2
 
 
 def test_summary_reports_all_cycle_times(cfg):
@@ -157,3 +149,43 @@ def test_a_pick_elsewhere_does_not_make_a_stuck_part_worth_retrying(cfg, monkeyp
     monkeypatch.setattr(machine.Supervisor, "_lift_transport_place", stuck_if_left)
     r = run_bin(s, "rules", seed=0, max_attempts=3)
     assert [x.target_part for x in r.records][0] == 0 and sorted(x.target_part for x in r.records[1:]) == [1, 2]
+
+
+def only_risky(cfg):
+    """One box leaning on a small one: tilted, so never a safe pick."""
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3))
+    return s
+
+
+def test_shakes_before_taking_a_risky_pick(cfg, monkeypatch):
+    from binpick.supervisor import run
+
+    real = run.rules_targets
+    monkeypatch.setattr(run, "rules_targets", lambda *a, **k: [dataclasses.replace(t, safe=False) for t in real(*a, **k)])
+    r = run_bin(only_risky(cfg), "rules", seed=0)
+    kinds = [e["event"] for e in r.events]
+    assert kinds.count("shake") == cfg.run.max_shakes  # shakes first, then takes it
+    assert len(r.records) >= 1 and r.placed == 1 and r.stop == "empty"
+
+
+def test_a_bin_with_only_failing_risky_picks_still_ends(cfg, monkeypatch):
+    from binpick.supervisor import machine, run
+
+    real = run.rules_targets
+    monkeypatch.setattr(run, "rules_targets", lambda *a, **k: [dataclasses.replace(t, safe=False) for t in real(*a, **k)])
+    monkeypatch.setattr(machine.SuctionCup, "sealed", lambda self: False)
+    r = run_bin(only_risky(cfg), "rules", seed=0, max_attempts=4)
+    assert r.stop == "attempt_limit" and len(r.records) == 4
+    assert r.shakes <= cfg.run.max_shakes + 3  # three before the first one, then one between risky picks
+
+
+def test_safe_picks_are_taken_without_shaking(cfg):
+    assert run_bin(loose_parts_scene(cfg), "rules", seed=0).shakes == 0
+
+
+def test_the_camera_noise_depends_only_on_the_seed(cfg):
+    s = loose_parts_scene(cfg)
+    s.sensor_rng = np.random.default_rng(99)  # whatever was used before the run
+    a = run_bin(s, "rules", seed=0)
+    b = run_bin(loose_parts_scene(cfg), "rules", seed=0)
+    assert [x.cycle_time_s for x in a.records] == [x.cycle_time_s for x in b.records]

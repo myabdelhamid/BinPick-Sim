@@ -6,7 +6,8 @@ For every candidate point the cup is laid on the seen surface the way the physic
   - lip over an edge, a jump, or ground the camera could not see;
   - deviation from the plane beyond the cup's curve limit (curved surfaces inside it are kept);
   - cup or tool too close to a wall, or anything taller standing in their way.
-The rest are scored; flat surfaces come before curved ones.
+The rest are scored. Safe picks (nothing taller along the part's outline, cup near the surface center, level) come
+before risky ones; within each, flat surfaces come before curved ones.
 """
 
 from __future__ import annotations
@@ -184,7 +185,7 @@ def _near_surface(view: BinView, label: int, p: np.ndarray, reach: float = 0.008
 
 
 def _crowding(view: BinView, label: int, cfg: Config) -> float:
-    """Fraction of the surface's outline with something taller right next to it: such a part may be pinned."""
+    """Share of the surface's outline with something taller right next to it: such a part may be pinned."""
     k = int(round(cfg.planner.crowd_reach / view.cell))
     mask = view.labels == label
     ij = np.argwhere(mask)
@@ -193,14 +194,15 @@ def _crowding(view: BinView, label: int, cfg: Config) -> float:
     m, z = mask[box], view.z[box]
     dist, near = ndimage.distance_transform_edt(~m, return_indices=True)
     rim = (dist > 0) & (dist <= k)
-    if not rim.any():
-        return 0.0
     n = view.normals[mask].mean(axis=0)
     ii, jj = np.mgrid[0:m.shape[0], 0:m.shape[1]]
     # surface height expected here if the nearest surface cell continued along the mean plane
     expect = z[near[0], near[1]] - (n[0] * (ii - near[0]) + n[1] * (jj - near[1])) * view.cell / n[2]
-    seen = rim & np.isfinite(z)
-    return float(np.mean(z[seen] - expect[seen] > cfg.planner.obstacle_height)) if seen.any() else 0.0
+    taller = rim & (z - expect > cfg.planner.obstacle_height)  # unseen cells (NaN) do not count
+    outline = m & ~ndimage.binary_erosion(m)
+    touched = np.zeros(m.shape, bool)
+    touched[near[0][taller], near[1][taller]] = True
+    return float((touched & outline).sum() / outline.sum())
 
 
 def longest_part(cfg: Config) -> float:
@@ -257,9 +259,10 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
             continue  # larger than any part: two parts the camera cannot tell apart
         seal = 1.0 - (1.0 - s.curve_limit_q) * drop[sel] / limit
         off = np.linalg.norm((pos[sel] - center)[:, :2], axis=1)
+        crowd = _crowding(view, c, cfg)
         score = (pl.w_height * (pos[sel, 2] - view.lo[2]) / (view.hi[2] - view.lo[2]) + pl.w_seal * seal
                  + pl.w_wall * np.minimum(wall[sel] / pl.wall_saturation, 1.0)
-                 - pl.w_center * off / r - pl.w_crowd * _crowding(view, c, cfg))
+                 - pl.w_center * off / r - pl.w_crowd * crowd)
         kept = 0
         for m in np.argsort(-score):
             g = sel[m]
@@ -267,9 +270,10 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
                 continue
             out.append((bool(drop[g] > pl.flat_drop), GraspTarget(
                 None, pos[g], n[g], float(tilt[g]), max_depth(view, pos[g], n[g], cfg), axis, center,
-                float(seal[m]), float(score[m]))))
+                float(seal[m]), float(score[m]), crowd,
+                bool(crowd <= pl.safe_crowd and off[m] <= pl.safe_offset and tilt[g] <= pl.safe_tilt_deg))))
             kept += 1
             if kept == pl.per_surface:
                 break
-    out.sort(key=lambda t: (t[0], -t[1].score))
+    out.sort(key=lambda t: (not t[1].safe, t[0], -t[1].score))
     return [t for _, t in out]

@@ -274,6 +274,9 @@ class PlannerConfig:
     w_crowd: float
     oversize_margin: float
     crowd_reach: float
+    safe_crowd: float
+    safe_offset: float
+    safe_tilt_deg: float
     wall_saturation: float
 
     def __post_init__(self):

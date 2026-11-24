@@ -198,3 +198,37 @@ def test_thin_cylinder_with_a_part_lying_against_its_side_is_rejected(cfg):
     box = PartSpec(1, "box", "plastic", (0.06, 0.10, d - 0.006), 0.2)
     s = two_parts(cfg, cyl, box, [0, 0, d / 2], [d / 2 * 0.62 + 0.03, 0, (d - 0.006) / 2], qa=quat_axis_angle([1, 0, 0], np.pi / 2))
     assert all(t.pos[0] > s.data.xpos[s.part_body_ids[1]][0] - 0.03 for t in targets(s))
+
+
+def test_safe_means_free_centered_and_level(cfg):
+    free = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.11, 0.11, 0.04), 0.5))
+    t = targets(free)[0]
+    assert t.safe and t.crowd == 0
+    off_center = rules_targets(observe_bin(free), cfg, avoid=[t.pos])
+    assert off_center and not any(x.safe for x in off_center)
+    tilted = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3), quat=quat_axis_angle([1, 0, 0], 0.2))
+    tilted.data.qpos[tilted.part_qpos_adr[0] + 2] += 0.02
+    assert targets(tilted) and not any(t.safe for t in targets(tilted))
+
+
+def test_a_part_with_another_resting_on_its_edge_is_not_safe(cfg):
+    low, top = PartSpec(0, "box", "plastic", (0.10, 0.10, 0.04), 0.4), PartSpec(1, "box", "plastic", (0.06, 0.06, 0.03), 0.13)
+    s = two_parts(cfg, low, top, [0, 0, 0.02], [0.05 + 0.02, 0, 0.055])  # 10 mm of overlap on one edge
+    c = s.data.xpos[s.part_body_ids[0]]
+    assert not any(t.safe for t in targets(s) if t.pos[2] < s.bin_inner_bounds()[0][2] + 0.05), c
+
+
+def test_safe_targets_come_first(cfg):
+    """A free cylinder (curved) before a flat box with something lying on its edge."""
+    specs = [PartSpec(0, "box", "plastic", (0.10, 0.10, 0.05), 0.5), PartSpec(1, "box", "plastic", (0.05, 0.05, 0.02), 0.06),
+             PartSpec(2, "cylinder", "plastic", (0.06, 0.09), 0.3)]
+    s = build_scene(cfg, specs)
+    lo, hi = s.bin_inner_bounds()
+    base = np.r_[(lo + hi)[:2] / 2, lo[2]]
+    for adr, p in zip(s.part_qpos_adr, ([-0.1, 0, 0.025], [-0.1 + 0.06, 0, 0.06], [0.12, 0, 0.03])):
+        s.data.qpos[adr:adr + 3] = base + p
+    s.data.qpos[s.part_qpos_adr[2] + 3:s.part_qpos_adr[2] + 7] = quat_axis_angle([1, 0, 0], np.pi / 2)
+    ts = targets(s)
+    k = [t.safe for t in ts]
+    assert k == sorted(k, reverse=True) and not all(k)
+    assert any(t.pos[0] > base[0] + 0.1 for t in ts if t.safe)

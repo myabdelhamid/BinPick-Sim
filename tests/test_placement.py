@@ -5,7 +5,7 @@ import pytest
 from binpick.motion.ik import cup_rotation, DOWN
 from binpick.sim.parts import PartSpec
 from binpick.sim.scene import build_scene
-from binpick.supervisor.placement import SlotAllocator, place_yaw, referee_in_slot, verify_slot
+from binpick.supervisor.placement import SlotAllocator, occupied_slots, place_yaw, referee_in_slot, verify_slot
 
 BOX = PartSpec(0, "box", "plastic", (0.09, 0.06, 0.03), 0.2)
 
@@ -66,3 +66,9 @@ def test_allocator_skips_slots_seen_occupied():
     al.mark_used(3)
     al.commit()
     assert al.peek() is None
+
+
+def test_noise_does_not_fill_empty_slots(cfg):
+    s = build_scene(cfg, [])
+    for k in range(30):
+        assert occupied_slots(s) == set(), k

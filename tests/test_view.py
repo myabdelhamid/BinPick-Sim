@@ -103,3 +103,11 @@ def test_flat_face_at_the_floor_has_no_holes(cfg, off):
     c = s.data.xpos[s.part_body_ids[0]]
     (i0, j0), (i1, j1) = v.index(c[:2] - 0.045), v.index(c[:2] + 0.045)
     assert np.isfinite(v.z[i0:i1, j0:j1]).all()
+
+
+def test_noise_does_not_fake_parts_or_hide_them(cfg):
+    empty = build_scene(cfg, [])
+    thin = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.045, 0.045, 0.02), 0.05), xy_offset=(0.15, 0.10))
+    for k in range(30):
+        assert observe_bin(empty).is_empty(), k
+        assert not observe_bin(thin).is_empty(), k
