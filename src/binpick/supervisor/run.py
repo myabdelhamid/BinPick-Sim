@@ -59,13 +59,17 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
         sup.observer = lambda s, phase: observer(s, phase, sup)
     pick_rng, shake_rng = np.random.default_rng([seed, 3]), np.random.default_rng([seed, 4])
     seen = {"empty": False}
+    failed: list[np.ndarray] = []  # points that failed since the pile last changed (a pick or a shake)
 
     def propose():
         view = observe_bin(scene)
         seen["empty"] = view.is_empty()
         if seen["empty"]:
             return []
-        return rules_targets(view, cfg) if planner == "rules" else random_targets(view, cfg, pick_rng)
+        if planner == "random":
+            return random_targets(view, cfg, pick_rng)
+        return [t for t in rules_targets(view, cfg)
+                if all(np.linalg.norm(t.pos - f) > cfg.run.avoid_radius for f in failed)]
 
     t0, shakes, in_a_row = scene.data.time, 0, 0
     while True:
@@ -76,7 +80,11 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             stop = "tray_full"
             break
         if sup.attempt(propose) is not None:
-            in_a_row = 0
+            if sup.last_success_sensed:
+                in_a_row = 0
+                failed.clear()
+            else:
+                failed.append(sup.last_target.pos)
             continue
         if seen["empty"]:
             stop = "empty"
@@ -86,6 +94,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
             break
         sup.shake(shake_rng)
         shakes, in_a_row = shakes + 1, in_a_row + 1
+        failed.clear()
 
     # ---- scoring (ground truth)
     mujoco.mj_forward(scene.model, scene.data)

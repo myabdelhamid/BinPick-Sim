@@ -45,7 +45,8 @@ class Supervisor:
         self.events: list[dict] = []
         self.lost: set[int] = set()
         self._phase = "idle"
-        self.n_candidates = 0  # targets offered by the planner in the last attempt
+        self.last_target: GraspTarget | None = None
+        self.last_success_sensed = False  # the robot's own verdict on the last attempt (not the referee's)
         self._watch_seal = False
         self._low_polls = 0
         self._k = 0
@@ -131,7 +132,6 @@ class Supervisor:
 
         def do_plan():
             candidates = [targets] if isinstance(targets, GraspTarget) else targets()
-            self.n_candidates = len(candidates)
             self._wait(cfg.timing.plan_s)
             for t in candidates:
                 try:
@@ -149,7 +149,7 @@ class Supervisor:
         rec = AttemptRecord(self.seed, len(self.records) + 1, self._truth_part(target), tilt_deg=target.tilt_deg,
                             est_seal=target.seal)
         self.records.append(rec)
-        self._clear = False
+        self.last_target, self._clear = target, False
         try:
             phase("approach", lambda: (self._run(joint_move(self._q(), plan["hover_q"], cfg.motion)),
                                        self._run(plan["approach"])))
@@ -177,6 +177,7 @@ class Supervisor:
             self._recover(phase)
             self._slot_after_failure(rec)
 
+        self.last_success_sensed = rec.verify_ok
         self._score(rec)
         rec.cycle_time_s = d.time - t0
         rec.phase_times = times

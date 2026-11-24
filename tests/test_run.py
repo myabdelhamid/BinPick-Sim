@@ -63,3 +63,22 @@ def test_run_command_writes_outputs(tmp_path, cfg, monkeypatch):
     s = json.loads((out / "summary.json").read_text())
     assert s["placed"] == 3 and s["stop"] == "empty" and s["attempts"] == 3
     assert (out / "attempts.csv").read_text().count("\n") == 4 and (out / "events.json").exists()
+
+
+def test_a_spot_that_just_failed_is_not_tried_again_at_once(cfg, monkeypatch):
+    """Every grip fails: the rules planner must move on to other parts instead of repeating the best one."""
+    from binpick.supervisor import machine
+
+    s = loose_parts_scene(cfg)
+    monkeypatch.setattr(machine.SuctionCup, "sealed", lambda self: False)
+    r = run_bin(s, "rules", seed=0, max_attempts=3)
+    assert sorted(x.target_part for x in r.records) == [0, 1, 2]
+
+
+def test_failures_do_not_reset_the_shake_count(cfg, monkeypatch):
+    from binpick.supervisor import machine
+
+    s = loose_parts_scene(cfg)
+    monkeypatch.setattr(machine.SuctionCup, "sealed", lambda self: False)
+    r = run_bin(s, "rules", seed=0)
+    assert r.stop == "no_candidate" and r.shakes == 3 and len(r.records) < 40

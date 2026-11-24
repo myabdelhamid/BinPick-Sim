@@ -137,6 +137,25 @@ def _rectangle(view: BinView, label: int) -> tuple[np.ndarray, np.ndarray]:
     return p + mid[0] * x + mid[1] * y, ax[0] * x + ax[1] * y
 
 
+def _crowding(view: BinView, label: int, cfg: Config) -> float:
+    """Fraction of the surface's outline with something taller right next to it: such a part may be pinned."""
+    k = int(round(cfg.planner.crowd_reach / view.cell))
+    mask = view.labels == label
+    ij = np.argwhere(mask)
+    lo, hi = np.maximum(ij.min(axis=0) - k - 1, 0), ij.max(axis=0) + k + 2
+    box = (slice(lo[0], hi[0]), slice(lo[1], hi[1]))
+    m, z = mask[box], view.z[box]
+    dist, near = ndimage.distance_transform_edt(~m, return_indices=True)
+    rim = (dist > 0) & (dist <= k)
+    if not rim.any():
+        return 0.0
+    n = view.normals[mask].mean(axis=0)
+    ii, jj = np.mgrid[0:m.shape[0], 0:m.shape[1]]
+    # surface height expected here if the nearest surface cell continued along the mean plane
+    expect = z[near[0], near[1]] - (n[0] * (ii - near[0]) + n[1] * (jj - near[1])) * view.cell / n[2]
+    return float(np.mean(z[rim] - expect[rim] > cfg.planner.obstacle_height))
+
+
 def max_depth(view: BinView, p: np.ndarray, n: np.ndarray, cfg: Config) -> float:
     """Largest thickness the part can have along n: it cannot reach below the floor, nor exceed the largest part."""
     longest = max(cfg.parts.box_footprint[1], cfg.parts.cyl_length[1])
@@ -180,7 +199,7 @@ def rules_targets(view: BinView, cfg: Config) -> list[GraspTarget]:
         off = np.linalg.norm((pos[sel] - center)[:, :2], axis=1)
         score = (pl.w_height * (pos[sel, 2] - view.lo[2]) / (view.hi[2] - view.lo[2]) + pl.w_seal * seal
                  + pl.w_wall * np.minimum(wall[sel] / pl.wall_saturation, 1.0)
-                 - pl.w_center * off / r)
+                 - pl.w_center * off / r - pl.w_crowd * _crowding(view, c, cfg))
         kept = 0
         for m in np.argsort(-score):
             g = sel[m]

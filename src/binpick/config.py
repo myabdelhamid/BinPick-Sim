@@ -255,6 +255,8 @@ class PlannerConfig:
     w_seal: float
     w_wall: float
     w_center: float
+    w_crowd: float
+    crowd_reach: float
     wall_saturation: float
 
     def __post_init__(self):
@@ -265,6 +267,7 @@ class PlannerConfig:
 class RunConfig:
     max_attempts: int
     max_shakes: int
+    avoid_radius: float
 
     def __post_init__(self):
         _positive(self, "max_attempts")

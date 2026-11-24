@@ -134,8 +134,11 @@ planner:
   w_seal: 0.5
   w_wall: 0.2
   w_center: 0.5                  # penalty per cup radius away from the surface center
+  w_crowd: 1.0                   # penalty for the share of the outline with something taller next to it (pinned?)
+  crowd_reach: 0.006             # how far around the surface to look for that
   wall_saturation: 0.08          # wall distance beyond this gives no extra score
 
 run:
   max_attempts: 40
   max_shakes: 3                  # in a row with nothing to pick
+  avoid_radius: 0.025            # rules planner: skip points this close to a failed one until the pile changes

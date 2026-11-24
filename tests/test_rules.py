@@ -110,3 +110,17 @@ def test_estimated_seal_agrees_with_the_physics(cfg):
             mujoco.mj_forward(s.model, s.data)
             n += 1
     assert n >= 5
+
+
+def test_free_part_before_a_higher_crowded_one(cfg):
+    """A part with taller neighbours against it is likely pinned: prefer one that can be lifted freely."""
+    a = PartSpec(0, "box", "plastic", (0.08, 0.08, 0.050), 0.3)
+    b = PartSpec(1, "box", "plastic", (0.08, 0.08, 0.040), 0.25)
+    walls = [PartSpec(2 + k, "box", "plastic", (0.02, 0.08, 0.07), 0.13) for k in range(2)]
+    s = build_scene(cfg, [a, b, *walls])
+    lo, hi = s.bin_inner_bounds()
+    base = np.r_[(lo + hi)[:2] / 2, lo[2]]
+    for adr, p in zip(s.part_qpos_adr, ([-0.1, 0, 0.025], [0.1, 0, 0.020], [-0.1 - 0.0505, 0, 0.035], [-0.1 + 0.0505, 0, 0.035])):
+        s.data.qpos[adr:adr + 3] = base + p
+    t = targets(s)[0]
+    assert t.pos[0] > base[0]  # the lower but free box
