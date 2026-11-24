@@ -196,3 +196,29 @@ def test_a_full_tray_and_an_empty_bin_is_called_empty(cfg, cols, stop):
     small = dataclasses.replace(cfg, tray=dataclasses.replace(cfg.tray, rows=1, cols=cols))
     r = run_bin(loose_parts_scene(small), "rules", seed=0)
     assert r.placed == cols and r.stop == stop
+
+
+def test_shakes_get_harder_if_the_first_does_not_help(cfg, monkeypatch):
+    from binpick.supervisor import machine
+
+    hard = []
+    real = machine.Supervisor.shake
+    monkeypatch.setattr(machine.Supervisor, "shake", lambda self, rng, hard_=False: (hard.append(hard_), real(self, rng, hard_))[1])
+    stick = PartSpec(0, "box", "plastic", (0.10, 0.040, 0.040), 0.2)  # no face fits the cup
+    run_bin(single_part_scene(cfg, stick), "rules", seed=0)
+    assert hard == [False, True, True]
+
+
+def test_a_hard_shake_keeps_a_full_pile_in_the_bin_and_moves_more(cfg):
+    from binpick.sim.settle import make_settled_scene
+
+    moved = {}
+    for h in (False, True):
+        s, _ = make_settled_scene(cfg, 1000)
+        lo, hi = s.bin_inner_bounds()
+        p0 = s.data.xpos[s.part_body_ids].copy()
+        Supervisor(s, np.random.default_rng(0), seed=0).shake(np.random.default_rng(1), h)
+        p = s.data.xpos[s.part_body_ids]
+        assert np.all(p[:, :2] > lo[:2]) and np.all(p[:, :2] < hi[:2])
+        moved[h] = np.linalg.norm(p - p0, axis=1).mean()
+    assert moved[True] > moved[False]

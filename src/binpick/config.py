@@ -115,6 +115,8 @@ class CamerasConfig:
 class ShakerConfig:
     amplitude: float
     freq_hz: float
+    hard_amplitude: float
+    hard_freq_hz: float
     duration_s: float
     settle_s: float
 

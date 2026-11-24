@@ -102,7 +102,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
         if in_a_row == cfg.run.max_shakes:
             stop = "no_candidate"
             break
-        sup.shake(shake_rng)
+        sup.shake(shake_rng, in_a_row > 0)  # harder if the first one did not help
         shakes, in_a_row = shakes + 1, in_a_row + 1
         no_seal.clear(), stuck.clear()
 

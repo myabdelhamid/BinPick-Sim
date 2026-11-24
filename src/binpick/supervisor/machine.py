@@ -402,7 +402,7 @@ class Supervisor:
         phase("retreat", retreat)
 
     # ---- shaking ---------------------------------------------------------------------------
-    def shake(self, rng: np.random.Generator) -> None:
+    def shake(self, rng: np.random.Generator, hard: bool = False) -> None:
         """Shake the bin with the arm out of the way, then give the parts time to settle."""
         scene, sh = self.scene, self.scene.cfg.shaker
         if not self._clear:
@@ -410,6 +410,7 @@ class Supervisor:
         self.events.append({"seed": self.seed, "time": scene.data.time, "event": "shake"})
         self._phase = "shake"
         acts = [scene.model.actuator(a).id for a in scene.shaker_actuators]
+        amplitude, freq = (sh.hard_amplitude, sh.hard_freq_hz) if hard else (sh.amplitude, sh.freq_hz)
         phase, t0 = rng.uniform(0, 2 * np.pi, 2), scene.data.time
         q = self._q()
         hold = JointTrajectory(np.array([0.0]), q[None, :])
@@ -418,7 +419,7 @@ class Supervisor:
             t = sc.data.time - t0
             # fade in and out so the bin starts and ends at home
             w = np.clip(min(t, sh.duration_s - t) / SHAKE_RAMP_S, 0.0, 1.0)
-            sc.data.ctrl[acts] = w * sh.amplitude * np.sin(2 * np.pi * sh.freq_hz * t + phase)
+            sc.data.ctrl[acts] = w * amplitude * np.sin(2 * np.pi * freq * t + phase)
             return self._on_step(sc)
 
         execute(scene, hold, step, hold_s=sh.duration_s + sh.settle_s)

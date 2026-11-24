@@ -47,8 +47,10 @@ cameras:
   edge_dropout: 0.5              # ... lose their reading this often
 
 shaker:
-  amplitude: 0.025               # 25 mm at 4 Hz = 1.6 g: flattens the pile (15 mm at 3 Hz = 0.5 g barely moved it)
+  amplitude: 0.025               # commanded; the bin really moves about 17 mm (1.1 g): flattens the pile
   freq_hz: 4.0
+  hard_amplitude: 0.040          # second and third shake in a row (the bin really moves about 24 mm at 5 Hz: 2.4 g)
+  hard_freq_hz: 5.0
   duration_s: 2.0
   settle_s: 1.0                  # wait after a shake before looking again
 
