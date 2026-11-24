@@ -232,3 +232,24 @@ def test_safe_targets_come_first(cfg):
     k = [t.safe for t in ts]
     assert k == sorted(k, reverse=True) and not all(k)
     assert any(t.pos[0] > base[0] + 0.1 for t in ts if t.safe)
+
+
+def narrow_box(cfg, w, k):
+    rng = np.random.default_rng(k)
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (rng.uniform(0.05, 0.11), w, 0.03), 0.2),
+                          quat=quat_axis_angle([0, 0, 1], rng.uniform(0, np.pi)), xy_offset=tuple(rng.uniform(-0.09, 0.09, 2)))
+    s.sensor_rng = rng
+    return s
+
+
+@pytest.mark.parametrize("k", range(8))
+def test_narrow_face_is_pickable_although_its_edges_are_hard_to_see(cfg, k):
+    s = narrow_box(cfg, 0.047, k)
+    t = targets(s)[0]
+    teleport_cup(s, t.pos, -t.normal)
+    assert seal_quality(s, 0) > 0.95
+
+
+@pytest.mark.parametrize("k", range(8))
+def test_face_narrower_than_the_cup_is_not_a_target(cfg, k):
+    assert targets(narrow_box(cfg, 0.0425, k)) == []

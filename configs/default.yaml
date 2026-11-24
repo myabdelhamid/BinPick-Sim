@@ -137,7 +137,7 @@ perception:
 
 planner:
   candidate_step: 0.004          # candidate grid on visible surfaces
-  edge_margin: 0.002             # the surface must extend this far beyond the cup lip
+  edge_margin: 0.0               # extra room demanded around the cup lip (face edges are located from whole rows of cells)
   max_tilt_deg: 20.0             # owner rule
   wall_clearance: 0.004          # cup edge to wall
   obstacle_height: 0.004         # taller than this above the cup plane ...

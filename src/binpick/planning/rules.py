@@ -13,6 +13,7 @@ before risky ones; within each, flat surfaces come before curved ones.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 from scipy import ndimage
@@ -23,6 +24,10 @@ from binpick.perception.view import BinView
 from binpick.planning.types import GraspTarget
 
 LIP_STEPS = 16
+FACE_RMS = 0.0005  # fit error that still counts as a flat face
+FACE_TOL = 0.0015  # seen points this close to its plane belong to it
+FACE_FILL = 0.8    # share of the fitted rectangle that must be seen
+EDGE_STRIP = 0.0015  # this close to the fitted edge a seen drop may be the edge itself
 STEEP = 1.2        # slope up to which readings on a curved side are trusted (50 deg) ...
 FLANK = 0.6        # ... reached this far (share of the radius) to both sides of the axis
 CYL_RMS = 0.0005   # fit error that still counts as a cylinder
@@ -47,7 +52,78 @@ def _surface_z(view: BinView, xy: np.ndarray) -> np.ndarray:
     return ndimage.map_coordinates(view.z, [ij[..., 0].ravel(), ij[..., 1].ravel()], order=1, cval=np.nan).reshape(xy.shape[:-1])
 
 
-def _lay_cup(view: BinView, pos: np.ndarray, n: np.ndarray, cfg: Config):
+@dataclass(frozen=True)
+class Face:
+    """A flat rectangular surface: center, unit axes a (long) and b, normal, half sizes."""
+    center: np.ndarray
+    a: np.ndarray
+    b: np.ndarray
+    n: np.ndarray
+    half: tuple[float, float]
+
+
+def flat_face(view: BinView, label: int) -> Face | None:
+    """The rectangle a flat surface fills, with edges located from all cells along them (a single cell at an edge is
+    often missing). None if the surface is not flat or does not fill a rectangle."""
+    mask = view.labels == label
+    ij = np.argwhere(mask)
+    lo, hi = np.maximum(ij.min(axis=0) - 6, 0), ij.max(axis=0) + 7
+    box = (slice(lo[0], hi[0]), slice(lo[1], hi[1]))
+    m, z = mask[box], view.z[box]
+    xy = view.xy(np.moveaxis(np.indices(m.shape), 0, -1) + lo)
+    A = np.column_stack([xy[m], np.ones(m.sum())])
+    c = np.linalg.lstsq(A, z[m], rcond=None)[0]
+    plane = xy @ c[:2] + c[2]
+    if np.sqrt(np.mean((z[m] - plane[m]) ** 2)) > FACE_RMS:
+        return None
+    on = ndimage.binary_dilation(m, iterations=4) & (np.abs(z - plane) < FACE_TOL)
+    comp, _ = ndimage.label(on)
+    on = np.isin(comp, np.unique(comp[m & on]))
+    n = np.array([-c[0], -c[1], 1.0])
+    n /= np.linalg.norm(n)
+    long = surface_rectangle(view, label)[1]
+    long = long - (long @ n) * n
+    long /= np.linalg.norm(long)
+    q = np.column_stack([xy[on], plane[on]])
+    p0 = q.mean(axis=0)
+
+    def extent(u: np.ndarray, v: np.ndarray) -> np.ndarray:
+        """Where rows of cells along u begin and end in v: the outer fifth of the rows (elsewhere edge cells are missing)."""
+        k = np.round((u - u.min()) / view.cell).astype(int)
+        first, last = np.full(k.max() + 1, np.inf), np.full(k.max() + 1, -np.inf)
+        np.minimum.at(first, k, v)
+        np.maximum.at(last, k, v)
+        ok = last - first > 5 * view.cell
+        half_cell = view.cell / 2
+        return np.array([np.percentile(first[ok], 20) - half_cell, np.percentile(last[ok], 80) + half_cell]) if ok.any() else np.zeros(2)
+
+    best = None
+    for t in np.deg2rad(np.arange(-3.0, 3.1, 0.5)):
+        a = long * np.cos(t) + np.cross(n, long) * np.sin(t)
+        b = np.cross(n, a)
+        u, v = (q - p0) @ a, (q - p0) @ b
+        eu, ev = extent(v, u), extent(u, v)
+        area = np.ptp(eu) * np.ptp(ev)
+        if best is None or area < best[0]:
+            best = (area, a, b, eu, ev)
+    area, a, b, eu, ev = best
+    if len(q) * view.cell**2 / n[2] < FACE_FILL * area:
+        return None
+    return Face(p0 + a * eu.mean() + b * ev.mean(), a, b, n, (float(np.ptp(eu) / 2), float(np.ptp(ev) / 2)))
+
+
+def _continue_flat(z: np.ndarray, flat: np.ndarray, face: Face) -> np.ndarray:
+    """Seen heights z at points `flat`, with the unseen strip along the edges of a flat rectangle filled in. Not where
+    something taller is seen, nor for a real drop well inside the rectangle."""
+    d = flat - face.center
+    plane = face.center[2] - (d[..., 0] * face.n[0] + d[..., 1] * face.n[1]) / face.n[2]
+    d = np.concatenate([d[..., :2], (plane - face.center[2])[..., None]], axis=-1)
+    inside = np.minimum(face.half[0] - np.abs(d @ face.a), face.half[1] - np.abs(d @ face.b))
+    use = (inside >= 0) & ~(z > plane + FACE_TOL) & ~((z < plane - FACE_TOL) & (inside > EDGE_STRIP))
+    return np.where(use, plane, z)
+
+
+def _lay_cup(view: BinView, pos: np.ndarray, n: np.ndarray, cfg: Config, lab: np.ndarray, faces: dict[int, Face | None]):
     """Wrap the lip around each (pos, n). Returns lip heights below the cup plane (N, K), NaN where the lip
     cannot sit, and the plane normal fitted to all points under the cup."""
     r, K = lip_radius(cfg), cfg.suction.lip_points
@@ -58,6 +134,9 @@ def _lay_cup(view: BinView, pos: np.ndarray, n: np.ndarray, cfg: Config):
     d = step * np.arange(1, LIP_STEPS + 1)
     flat = pos[:, None, None] + d[None, None, :, None] * u[:, :, None]                    # (N, K, S, 3)
     z = _surface_z(view, flat[..., :2])
+    for k in np.unique(lab):
+        if faces[k] is not None:
+            z[lab == k] = _continue_flat(z[lab == k], flat[lab == k], faces[k])
     # height below the cup plane along the cup axis of the surface point above/below each sample
     h = -(z - flat[..., 2]) * n[:, None, None, 2]
     h = _continue_curve(h, d, th, cfg)
@@ -224,23 +303,25 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
     grid = np.zeros(view.z.shape, bool)
     grid[::k, ::k] = True
     ij = np.argwhere(grid & (view.labels > 0))
-    centers = [view.index(view.surface_center(lab)[:2]) for lab in np.unique(view.labels) if lab > 0]
-    centers = [c for c in centers if view.labels[c] > 0]
-    ij = np.vstack([ij, np.array(centers, dtype=int).reshape(-1, 2)])
-    if len(ij) == 0:
+    faces = {int(k): flat_face(view, k) for k in np.unique(view.labels) if k > 0}
+    centers = {k: f.center if f is not None else view.surface_center(k) for k, f in faces.items()}
+    centers = {k: c for k, c in centers.items() if view.labels[view.index(c[:2])] == k}
+    if not faces:
         return []
-    lab = view.labels[tuple(ij.T)]
-    pos = np.column_stack([view.xy(ij), view.z[tuple(ij.T)]])
-    n = view.normals[tuple(ij.T)]
+    cij = np.array([view.index(c[:2]) for c in centers.values()], dtype=int).reshape(-1, 2)
+    lab = np.concatenate([view.labels[tuple(ij.T)], np.array(list(centers), dtype=int)])
+    pos = np.vstack([np.column_stack([view.xy(ij), view.z[tuple(ij.T)]]),
+                     np.column_stack([np.array([c[:2] for c in centers.values()]).reshape(-1, 2), view.z[tuple(cij.T)]])])
+    n = np.vstack([view.normals[tuple(ij.T)], view.normals[tuple(cij.T)]])
     ok = n[:, 2] > np.cos(np.deg2rad(60))
     pos, n, lab = pos[ok], n[ok], lab[ok]
     for _ in range(2):  # align the cup with the plane under it
         if len(pos) == 0:
             return []
-        _, n = _lay_cup(view, pos, n, cfg)
+        _, n = _lay_cup(view, pos, n, cfg, lab, faces)
         ok = np.isfinite(n).all(axis=1) & (n[:, 2] > np.cos(np.deg2rad(60)))
         pos, n, lab = pos[ok], n[ok], lab[ok]
-    lip, _ = _lay_cup(view, pos, n, cfg)
+    lip, _ = _lay_cup(view, pos, n, cfg, lab, faces)
     tilt = np.degrees(np.arccos(np.clip(n[:, 2], -1, 1)))
     drop = _lip_drop(lip)
     limit = s.curve_radius_min * (1 - np.cos(lip_radius(cfg) / s.curve_radius_min))
