@@ -141,3 +141,45 @@ def demo_main(argv: list[str] | None = None) -> int:
     ok = sum(r.outcome == "success" for r in sup.records)
     print(f"{ok}/{len(sup.records)} successful; wrote {out}")
     return 0
+
+
+def run_main(argv: list[str] | None = None) -> int:
+    """Run one bin from the camera image until it is empty (or the run ends), log and optionally film it."""
+    from binpick.supervisor.records import write_csv
+    from binpick.supervisor.run import PLANNERS, run_bin
+
+    ap = argparse.ArgumentParser(prog="binpick-run", description="Empty one bin using the camera.")
+    ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--planner", choices=PLANNERS, default="rules")
+    ap.add_argument("--max-attempts", type=int, default=None)
+    ap.add_argument("--video", action="store_true", help="write run.mp4 from the overview camera")
+    ap.add_argument("--config", default=None)
+    ap.add_argument("--out", default="outputs")
+    args = ap.parse_args(argv)
+
+    cfg = load_config(args.config)
+    seed = cfg.seed if args.seed is None else args.seed
+    scene, _ = make_settled_scene(cfg, seed)
+    out = Path(args.out) / f"run_seed{seed}_{args.planner}"
+    out.mkdir(parents=True, exist_ok=True)
+    rec = _VideoRecorder(scene, out / "run.mp4") if args.video else None
+
+    def film(s, ph, sup):
+        ok = sum(r.outcome == "success" for r in sup.records)
+        rec.status = f"{args.planner}: attempt {len(sup.records)}, {ok} placed"
+        rec(s, ph, sup.cup.pressure_display_kpa())
+
+    try:
+        res = run_bin(scene, args.planner, seed, max_attempts=args.max_attempts, observer=film if rec else None)
+    finally:
+        if rec:
+            rec.close()
+    write_csv(res.records, out / "attempts.csv")
+    (out / "events.json").write_text(json.dumps(res.events, indent=2, default=float))
+    (out / "summary.json").write_text(json.dumps(res.summary(), indent=2))
+    for r in res.records:
+        print(f"attempt {r.attempt}: part {r.target_part} -> {r.outcome}"
+              f"{'' if r.outcome == 'success' else ' (' + r.reason + ')'}  slot={r.slot}  cycle={r.cycle_time_s:.2f}s")
+    print(f"{res.planner}, seed {seed}: {res.placed}/{len(scene.parts)} placed in {len(res.records)} attempts, "
+          f"{res.shakes} shakes, stopped: {res.stop}; wrote {out}")
+    return 0

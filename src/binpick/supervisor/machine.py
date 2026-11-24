@@ -24,6 +24,7 @@ from binpick.supervisor.records import AttemptRecord
 HOVER_ABOVE_RIM = 0.10   # approach lines start at least this far above the bin rim
 PROBE_BLANK_S = 0.12     # contact probing ignores the start of the move (the arm is still speeding up)
 PROBE_WINDOW_S = 0.02    # lag is compared with its mean 20-40 ms earlier
+SHAKE_RAMP_S = 0.3
 SEAL_POLL_STEPS = 10     # read the vacuum sensor every 10 physics steps (20 ms)
 
 Observer = Callable[[Scene, str], None]
@@ -325,6 +326,30 @@ class Supervisor:
             self._to_view()
 
         phase("retreat", retreat)
+
+    # ---- shaking ---------------------------------------------------------------------------
+    def shake(self, rng: np.random.Generator) -> None:
+        """Shake the bin with the arm out of the way, then give the parts time to settle."""
+        scene, sh = self.scene, self.scene.cfg.shaker
+        if not self._clear:
+            self._to_view()
+        self.events.append({"seed": self.seed, "time": scene.data.time, "event": "shake"})
+        self._phase = "shake"
+        acts = [scene.model.actuator(a).id for a in scene.shaker_actuators]
+        phase, t0 = rng.uniform(0, 2 * np.pi, 2), scene.data.time
+        q = self._q()
+        hold = JointTrajectory(np.array([0.0]), q[None, :])
+
+        def step(sc: Scene) -> bool:
+            t = sc.data.time - t0
+            # fade in and out so the bin starts and ends at home
+            w = np.clip(min(t, sh.duration_s - t) / SHAKE_RAMP_S, 0.0, 1.0)
+            sc.data.ctrl[acts] = w * sh.amplitude * np.sin(2 * np.pi * sh.freq_hz * t + phase)
+            return self._on_step(sc)
+
+        execute(scene, hold, step, hold_s=sh.duration_s + sh.settle_s)
+        scene.data.ctrl[acts] = 0.0
+        self._phase = "idle"
 
     # ---- scoring (ground truth) ------------------------------------------------------------
     def _score(self, rec: AttemptRecord) -> None:

@@ -43,6 +43,7 @@ shaker:
   amplitude: 0.015
   freq_hz: 3.0
   duration_s: 1.5
+  settle_s: 1.0                  # wait after a shake before looking again
 
 settle:
   lin_tol: 0.001
@@ -134,3 +135,7 @@ planner:
   w_wall: 0.2
   w_center: 0.5                  # penalty per cup radius away from the surface center
   wall_saturation: 0.08          # wall distance beyond this gives no extra score
+
+run:
+  max_attempts: 40
+  max_shakes: 3                  # in a row with nothing to pick

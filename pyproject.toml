@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 binpick-scene = "binpick.cli:scene_main"
 binpick-demo = "binpick.cli:demo_main"
+binpick-run = "binpick.cli:run_main"
 
 [dependency-groups]
 dev = ["pytest>=8"]

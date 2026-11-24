@@ -107,6 +107,7 @@ class ShakerConfig:
     amplitude: float
     freq_hz: float
     duration_s: float
+    settle_s: float
 
     def __post_init__(self):
         _positive(self, "amplitude", "freq_hz", "duration_s")
@@ -261,6 +262,15 @@ class PlannerConfig:
 
 
 @dataclass(frozen=True)
+class RunConfig:
+    max_attempts: int
+    max_shakes: int
+
+    def __post_init__(self):
+        _positive(self, "max_attempts")
+
+
+@dataclass(frozen=True)
 class Config:
     seed: int
     parts: PartsConfig
@@ -277,6 +287,7 @@ class Config:
     suction: SuctionConfig
     perception: PerceptionConfig
     planner: PlannerConfig
+    run: RunConfig
 
 
 def load_config(path: str | Path | None = None) -> Config:
@@ -303,4 +314,5 @@ def load_config(path: str | Path | None = None) -> Config:
         suction=SuctionConfig(**raw["suction"]),
         perception=PerceptionConfig(**raw["perception"]),
         planner=PlannerConfig(**raw["planner"]),
+        run=RunConfig(**raw["run"]),
     )
