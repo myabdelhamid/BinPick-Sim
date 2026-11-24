@@ -36,6 +36,7 @@ class Scene:
     shaker_actuators: tuple[str, str] = ("shaker_x", "shaker_y")
     bin_body: str = "bin"
     sensor_rng: np.random.Generator = field(default_factory=lambda: np.random.default_rng(0))  # depth-camera noise
+    _cell: Scene | None = field(default=None, repr=False)
     arm_actuator_names: list[str] = field(default_factory=lambda: [f"{PREFIX}actuator{i}" for i in range(1, 8)])
 
     def bin_inner_bounds(self) -> tuple[np.ndarray, np.ndarray]:
@@ -47,6 +48,26 @@ class Scene:
         lo = np.array([c[0] - ix / 2, c[1] - iy / 2, c[2] + w])
         hi = np.array([c[0] + ix / 2, c[1] + iy / 2, c[2] + w + iz])
         return lo, hi
+
+    def empty_cell(self) -> Scene:
+        """The cell as the robot knows it (arm, bin, tray, no parts): for its own model calculations."""
+        if self._cell is None:
+            self._cell = build_scene(self.cfg, [])
+        return self._cell
+
+    def arm_inertia(self, q: np.ndarray) -> np.ndarray:
+        """(7, 7) joint-space inertia of arm and tool."""
+        c = self.empty_cell()
+        m, d = c.model, c.data
+        adr = [int(m.joint(j).qposadr[0]) for j in c.arm_joint_names]
+        dof = [int(m.joint(j).dofadr[0]) for j in c.arm_joint_names]
+        d.qpos[adr] = q
+        mujoco.mj_kinematics(m, d)
+        mujoco.mj_comPos(m, d)
+        mujoco.mj_crb(m, d)
+        M = np.zeros((m.nv, m.nv))
+        mujoco.mj_fullM(m, d, M)
+        return M[np.ix_(dof, dof)]
 
     def park_arm(self) -> None:
         for j, a, q in zip(self.arm_joint_names, self.arm_actuator_names, PARK_Q):

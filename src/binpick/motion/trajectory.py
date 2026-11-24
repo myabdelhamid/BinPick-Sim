@@ -7,12 +7,14 @@ from dataclasses import dataclass
 
 import mujoco
 import numpy as np
+from scipy.interpolate import CubicSpline
 
 from binpick.config import MotionConfig
 from binpick.motion.ik import solve_cup_pose
 from binpick.sim.scene import Scene
 
 SAMPLE_DT = 0.01
+LINE_POS_TOL, LINE_ROT_TOL = 1e-4, 1e-3  # waypoints of a straight line: a wavy line drags parts against their neighbours
 MAX_WAYPOINT_JUMP = 0.3  # rad; larger means an IK branch flip between neighbouring waypoints
 # Time scaling: trapezoidal velocity whose acceleration phases are "modified trapezoid" pulses
 # (sine jerk ramps over the first and last quarter, constant in the middle): finite jerk, and the
@@ -41,6 +43,10 @@ class JointTrajectory:
     def velocity(self, t: float) -> np.ndarray:
         h = SAMPLE_DT / 2
         return (self.sample(t + h) - self.sample(t - h)) / (2 * h) if self.duration > 0 else np.zeros(self.q.shape[1])
+
+    def acceleration(self, t: float) -> np.ndarray:
+        h = SAMPLE_DT
+        return (self.sample(t + h) - 2 * self.sample(t) + self.sample(t - h)) / h**2 if self.duration > 0 else np.zeros(self.q.shape[1])
 
 
 def _optimal(D: float, V: float, A: float) -> float:
@@ -94,7 +100,8 @@ def cartesian_line(scene: Scene, q0: np.ndarray, p0: np.ndarray, p1: np.ndarray,
     k = max(2, int(np.ceil(L / m.cart_step)) + 1)
     qs, q = [], np.asarray(q0, float)
     for i, u in enumerate(np.linspace(0, 1, k)):
-        r = solve_cup_pose(scene, p0 + u * (p1 - p0), approach_dir, yaw, q0=q, flip=i == 0)
+        r = solve_cup_pose(scene, p0 + u * (p1 - p0), approach_dir, yaw, q0=q, pos_tol=LINE_POS_TOL, rot_tol=LINE_ROT_TOL,
+                           flip=i == 0)
         if not r.ok:
             raise IKError(f"waypoint {i}/{k - 1} unreachable (pos_err={r.pos_err:.4f})")
         if np.abs(r.q - q).max() > MAX_WAYPOINT_JUMP:  # waypoint 0 is checked against q0 (no step command)
@@ -109,8 +116,11 @@ def cartesian_line(scene: Scene, q0: np.ndarray, p0: np.ndarray, p1: np.ndarray,
                         + [(float(d), v, joint_acc) for d, v in zip(jdist, m.max_joint_vel)])
     n = int(np.ceil(T / SAMPLE_DT)) + 1
     s = _profile(T, Ta, n) * (k - 1)  # fractional waypoint index along the path
-    q = np.array([np.interp(s, np.arange(k), qs[:, j]) for j in range(qs.shape[1])]).T
-    return JointTrajectory(np.linspace(0, T, n), q)
+    return JointTrajectory(np.linspace(0, T, n), CubicSpline(np.arange(k), qs)(s))
+
+
+def reverse(tr: JointTrajectory) -> JointTrajectory:
+    return JointTrajectory(tr.t, tr.q[::-1])
 
 
 def concat(*trs: JointTrajectory) -> JointTrajectory:
@@ -124,19 +134,24 @@ def concat(*trs: JointTrajectory) -> JointTrajectory:
 
 def execute(scene: Scene, traj: JointTrajectory, on_step: Callable[[Scene], bool] | None = None,
             hold_s: float | None = None) -> bool:
-    """Track `traj` with the Panda position actuators (plus velocity feed-forward for their damping).
+    """Track `traj` with the Panda position actuators, plus feed-forward for their damping and the arm's own inertia
+    (as the real controller does; the part's weight is unknown and not included).
 
     `on_step` runs after every physics step; returning False aborts (the arm holds where it is).
     """
     m, d = scene.model, scene.data
     ids = [m.actuator(a).id for a in scene.arm_actuator_names]
-    kv_over_kp = np.array([-m.actuator_biasprm[i, 2] / m.actuator_gainprm[i, 0] for i in ids])
+    kp = np.array([m.actuator_gainprm[i, 0] for i in ids])
+    kv_over_kp = np.array([-m.actuator_biasprm[i, 2] for i in ids]) / kp
     hold = scene.cfg.motion.settle_after_move_s if hold_s is None else hold_s
     t0 = d.time
     n = int(np.ceil((traj.duration + hold) / m.opt.timestep))
     for _ in range(n):
         t = d.time - t0 + m.opt.timestep
-        d.ctrl[ids] = traj.sample(t) + kv_over_kp * (traj.velocity(t) if t < traj.duration else 0.0)
+        q = traj.sample(t)
+        if t < traj.duration:
+            q = q + kv_over_kp * traj.velocity(t) + scene.arm_inertia(q) @ traj.acceleration(t) / kp
+        d.ctrl[ids] = q
         mujoco.mj_step(m, d)
         if on_step is not None and on_step(scene) is False:
             d.ctrl[ids] = [d.joint(j).qpos[0] for j in scene.arm_joint_names]

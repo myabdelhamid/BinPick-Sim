@@ -2,9 +2,10 @@ import mujoco
 import numpy as np
 import pytest
 
-from binpick.motion.ik import DOWN, solve_cup_down
+from binpick.motion.ik import DOWN, solve_cup_down, yaw_of
 from binpick.motion.trajectory import cartesian_line, execute, joint_move
 from binpick.sim.scene import PARK_Q, build_scene
+from helpers import teleport_cup
 
 
 @pytest.fixture()
@@ -82,3 +83,25 @@ def test_straight_line_does_not_waste_ik_on_a_flipped_wrist(cfg, monkeypatch):
     tr = cartesian_line(s, r.q, p, p - [0, 0, 0.15], DOWN, r.yaw, cfg.motion)  # 16 waypoints
     assert np.abs(np.diff(tr.q, axis=0)).max() < 0.1
     assert len(calls) == 17  # one each, plus the alternative at the first
+
+
+@pytest.mark.parametrize("at", [(0.0, 0.0), (0.13, 0.09), (-0.13, -0.09)])
+def test_a_vertical_lift_is_really_vertical(empty, cfg, at):
+    """A part touching a wall or a neighbour jams if the cup moves sideways while lifting."""
+    lo, hi = empty.bin_inner_bounds()
+    p0 = np.r_[(lo + hi)[:2] / 2 + at, lo[2] + 0.04]
+    teleport_cup(empty, p0)
+    tip0 = empty.data.site(empty.cup_site).xpos.copy()
+    R0 = empty.data.site(empty.cup_site).xmat.reshape(3, 3).copy()
+    tr = cartesian_line(empty, _arm_q(empty), tip0, tip0 + [0, 0, 0.15], R0[:, 2], yaw_of(R0), cfg.motion, loaded=True)
+    off, rot = [], []
+
+    def watch(s):
+        st = s.data.site(s.cup_site)
+        off.append(np.linalg.norm(st.xpos[:2] - tip0[:2]))
+        rot.append(np.arccos(np.clip((np.trace(R0.T @ st.xmat.reshape(3, 3)) - 1) / 2, -1, 1)))
+        return True
+
+    assert execute(empty, tr, watch)
+    assert max(off) < 4e-4, max(off)
+    assert np.degrees(max(rot)) < 0.12

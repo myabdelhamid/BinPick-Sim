@@ -13,8 +13,9 @@ from collections.abc import Callable
 import mujoco
 import numpy as np
 
+from binpick.motion.collision import CellCheck
 from binpick.motion.ik import DOWN, cup_rotation, solve_cup_pose, yaw_of
-from binpick.motion.trajectory import IKError, JointTrajectory, cartesian_line, execute, joint_move
+from binpick.motion.trajectory import IKError, JointTrajectory, cartesian_line, execute, joint_move, reverse
 from binpick.planning.types import GraspTarget
 from binpick.sim.scene import PARK_X0, Scene
 from binpick.sim.suction import SuctionCup
@@ -40,6 +41,7 @@ class Supervisor:
     def __init__(self, scene: Scene, rng: np.random.Generator, seed: int, observer: Observer | None = None):
         self.scene, self.seed, self.observer = scene, seed, observer
         self.cup = SuctionCup(scene, rng)
+        self.cell = CellCheck(scene)
         cfg = scene.cfg
         self.slots = SlotAllocator(cfg.tray.rows * cfg.tray.cols)
         self.records: list[AttemptRecord] = []
@@ -163,6 +165,7 @@ class Supervisor:
                             est_seal=target.seal)
         self.records.append(rec)
         self.last_target, self._clear = target, False
+        self._way_in = plan["approach"]
         self._held_part, self._arm_hit_n = None, 0.0
         try:
             phase("approach", lambda: (self._run(joint_move(self._q(), plan["hover_q"], cfg.motion)),
@@ -209,8 +212,10 @@ class Supervisor:
         r = self._ik_min_motion(hover, -n)
         if not r.ok:
             raise IKError("hover unreachable")
-        return {"hover_q": r.q, "approach": cartesian_line(self.scene, r.q, hover, near, -n, r.yaw, cfg.motion, loaded=False),
-                "near": near, "yaw": r.yaw}
+        approach = cartesian_line(self.scene, r.q, hover, near, -n, r.yaw, cfg.motion, loaded=False)
+        if self.cell.path_hits(joint_move(self._q(), r.q, cfg.motion)) or self.cell.path_hits(approach):
+            raise IKError("collision with the cell on the way in")
+        return {"hover_q": r.q, "approach": approach, "near": near, "yaw": r.yaw}
 
     def _truth_part(self, t: GraspTarget) -> int | None:
         """Ground truth, for the log only: which part lies under the chosen point."""
@@ -353,7 +358,9 @@ class Supervisor:
             try:
                 self._run(self._line(p, up, R[:, 2], yaw_of(R), loaded=False))
             except IKError:
-                self._wait(0.2)
+                if p[2] < self._rim() + HOVER_ABOVE_RIM:  # inside the bin: back out along the approach
+                    self._run(joint_move(self._q(), self._way_in.q[-1], cfg.motion))
+                    self._run(reverse(self._way_in))
             self._to_view()
 
         phase("retreat", retreat)
