@@ -95,15 +95,23 @@ def joint_move(q0: np.ndarray, q1: np.ndarray, m: MotionConfig, loaded: bool = F
 def cartesian_line(scene: Scene, q0: np.ndarray, p0: np.ndarray, p1: np.ndarray, approach_dir: np.ndarray,
                    yaw: float, m: MotionConfig, loaded: bool = True) -> JointTrajectory:
     """Cup tip moves on the straight line p0 -> p1 with fixed orientation (axis `approach_dir`, `yaw`)."""
-    p0, p1 = np.asarray(p0, float), np.asarray(p1, float)
-    L = float(np.linalg.norm(p1 - p0))
-    k = max(2, int(np.ceil(L / m.cart_step)) + 1)
+    return cartesian_path(scene, q0, [p0, p1], approach_dir, yaw, m, loaded)
+
+
+def cartesian_path(scene: Scene, q0: np.ndarray, points: list, approach_dir: np.ndarray, yaw: float, m: MotionConfig,
+                   loaded: bool = True) -> JointTrajectory:
+    """Cup tip moves through `points` (smooth at the corners) with fixed orientation."""
+    way = [np.asarray(points[0], float)]
+    for a, b in zip(points[:-1], points[1:]):
+        a, b = np.asarray(a, float), np.asarray(b, float)
+        n = max(1, int(np.ceil(np.linalg.norm(b - a) / m.cart_step)))
+        way += [a + (b - a) * k / n for k in range(1, n + 1)]
+    dist = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(way, axis=0), axis=1))]
     qs, q = [], np.asarray(q0, float)
-    for i, u in enumerate(np.linspace(0, 1, k)):
-        r = solve_cup_pose(scene, p0 + u * (p1 - p0), approach_dir, yaw, q0=q, pos_tol=LINE_POS_TOL, rot_tol=LINE_ROT_TOL,
-                           flip=i == 0)
+    for i, p in enumerate(way):
+        r = solve_cup_pose(scene, p, approach_dir, yaw, q0=q, pos_tol=LINE_POS_TOL, rot_tol=LINE_ROT_TOL, flip=i == 0)
         if not r.ok:
-            raise IKError(f"waypoint {i}/{k - 1} unreachable (pos_err={r.pos_err:.4f})")
+            raise IKError(f"waypoint {i}/{len(way) - 1} unreachable (pos_err={r.pos_err:.4f})")
         if np.abs(r.q - q).max() > MAX_WAYPOINT_JUMP:  # waypoint 0 is checked against q0 (no step command)
             raise IKError(f"IK branch jump at waypoint {i}")
         yaw, q = r.yaw, r.q
@@ -112,11 +120,13 @@ def cartesian_line(scene: Scene, q0: np.ndarray, p0: np.ndarray, p1: np.ndarray,
     jdist = np.abs(np.diff(qs, axis=0)).sum(axis=0)
     cart_acc = m.max_cart_acc if loaded else m.max_cart_acc_empty
     joint_acc = m.max_joint_acc_loaded if loaded else m.max_joint_acc
-    T, Ta = _time_scale([(L, m.max_cart_vel, cart_acc)]
+    T, Ta = _time_scale([(dist[-1], m.max_cart_vel, cart_acc)]
                         + [(float(d), v, joint_acc) for d, v in zip(jdist, m.max_joint_vel)])
     n = int(np.ceil(T / SAMPLE_DT)) + 1
-    s = _profile(T, Ta, n) * (k - 1)  # fractional waypoint index along the path
-    return JointTrajectory(np.linspace(0, T, n), CubicSpline(np.arange(k), qs)(s))
+    s = _profile(T, Ta, n) * dist[-1]
+    if dist[-1] <= 0:
+        return JointTrajectory(np.linspace(0, T, n), np.repeat(qs[:1], n, axis=0))
+    return JointTrajectory(np.linspace(0, T, n), CubicSpline(dist, qs)(s))
 
 
 def reverse(tr: JointTrajectory) -> JointTrajectory:
@@ -133,10 +143,11 @@ def concat(*trs: JointTrajectory) -> JointTrajectory:
 
 
 def execute(scene: Scene, traj: JointTrajectory, on_step: Callable[[Scene], bool] | None = None,
-            hold_s: float | None = None) -> bool:
+            hold_s: float | None = None, sideways_gain: float = 0.0) -> bool:
     """Track `traj` with the Panda position actuators, plus feed-forward for their damping and the arm's own inertia
     (as the real controller does; the part's weight is unknown and not included).
 
+    `sideways_gain` adds stiffness against horizontal deviation of the cup, seen in the joint readings.
     `on_step` runs after every physics step; returning False aborts (the arm holds where it is).
     """
     m, d = scene.model, scene.data
@@ -146,11 +157,18 @@ def execute(scene: Scene, traj: JointTrajectory, on_step: Callable[[Scene], bool
     hold = scene.cfg.motion.settle_after_move_s if hold_s is None else hold_s
     t0 = d.time
     n = int(np.ceil((traj.duration + hold) / m.opt.timestep))
+    tip, J = m.site(scene.cup_site).id, np.zeros((3, m.nv))
+    qadr = [int(m.joint(j).qposadr[0]) for j in scene.arm_joint_names]
+    dofs = [int(m.joint(j).dofadr[0]) for j in scene.arm_joint_names]
     for _ in range(n):
         t = d.time - t0 + m.opt.timestep
         q = traj.sample(t)
         if t < traj.duration:
             q = q + kv_over_kp * traj.velocity(t) + scene.arm_inertia(q) @ traj.acceleration(t) / kp
+        if sideways_gain > 0:
+            mujoco.mj_jacSite(m, d, J, None, tip)
+            off = J[:2, dofs] @ (traj.sample(t - m.opt.timestep) - d.qpos[qadr])
+            q = q + sideways_gain * np.linalg.pinv(J[:, dofs])[:, :2] @ off
         d.ctrl[ids] = q
         mujoco.mj_step(m, d)
         if on_step is not None and on_step(scene) is False:

@@ -1,3 +1,4 @@
+import mujoco
 import numpy as np
 import pytest
 
@@ -107,3 +108,35 @@ def test_csv(two_picks, tmp_path):
     write_csv(sup.records, p)
     lines = p.read_text().splitlines()
     assert len(lines) == 3 and lines[0].startswith("seed,attempt,")
+
+
+def test_lift_moves_away_from_the_wall_the_part_touches(cfg):
+    ix = cfg.bin.inner[0]
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3), xy_offset=(-(ix / 2 - 0.0402), 0.0))
+    for _ in range(100):
+        mujoco.mj_step(s.model, s.data)
+    from binpick.perception.view import observe_bin
+    from binpick.planning.rules import rules_targets
+
+    t = rules_targets(observe_bin(s), cfg)[0]
+    xs = []
+    sup = Supervisor(s, np.random.default_rng(0), seed=0,
+                     observer=lambda sc, ph: xs.append(sc.data.site(sc.cup_site).xpos.copy()) if ph == "lift" else None)
+    rec = sup.attempt(t)
+    xs = np.array(xs)
+    up = xs[np.argmin(np.abs(xs[:, 2] - xs[0, 2] - 0.012))]
+    assert rec.outcome == "success" and up[0] - xs[0, 0] == pytest.approx(cfg.motion.lift_away, abs=6e-4)
+
+
+def test_heavy_part_is_felt_and_moved_gently(cfg):
+    times = {}
+    for mass in (0.3, 1.6):
+        s = single_part_scene(cfg, PartSpec(0, "box", "steel", (0.08, 0.08, 0.04), mass))
+        for _ in range(200):
+            mujoco.mj_step(s.model, s.data)
+        sup = Supervisor(s, np.random.default_rng(0), seed=0)
+        rec = sup.attempt(oracle_targets(s)[0])
+        assert rec.outcome == "success"
+        assert sup.felt_mass_kg == pytest.approx(mass, abs=0.15)
+        times[mass] = rec.phase_times["transport"]
+    assert times[1.6] > 1.1 * times[0.3]

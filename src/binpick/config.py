@@ -177,6 +177,12 @@ class MotionConfig:
     pregrasp_dist: float
     approach_overtravel: float
     lift_dist: float
+    lift_acc: float
+    lift_away: float
+    lift_away_rise: float
+    lift_sideways_gain: float
+    heavy_kg: float
+    max_joint_acc_heavy: float
     clear_above_rim: float
     place_clearance: float
     retreat_dist: float
@@ -274,6 +280,7 @@ class PlannerConfig:
     w_crowd: float
     oversize_margin: float
     crowd_reach: float
+    touch_band: tuple[float, float]
     safe_crowd: float
     safe_offset: float
     safe_tilt_deg: float

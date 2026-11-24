@@ -83,7 +83,13 @@ motion:
   cart_step: 0.01                # IK waypoint spacing on straight lines
   pregrasp_dist: 0.12            # stand-off along the face normal before approach
   approach_overtravel: 0.002     # go this far past the surface (cup margin absorbs it)
-  lift_dist: 0.06                # first lift along the face normal
+  lift_dist: 0.06                # lift at least this far
+  lift_acc: 1.5                  # m/s^2, lifting out of the pile
+  lift_away: 0.0015              # m, sideways shift away from whatever touches the part ...
+  lift_away_rise: 0.006          # ... over the first 6 mm of the lift
+  lift_sideways_gain: 3.0        # sideways stiffness added from the joint readings while lifting
+  heavy_kg: 1.2                  # a part felt to be heavier than this ...
+  max_joint_acc_heavy: 2.0       # ... is carried at this acceleration
   clear_above_rim: 0.05          # transport height margin above rim + part height
   place_clearance: 0.014         # start feeling for the tray this far above where the part could touch (the first 0.12 s of the probe is blind)
   retreat_dist: 0.10
@@ -151,6 +157,7 @@ planner:
   w_crowd: 1.0                   # penalty for the share of the outline with something taller next to it (pinned?)
   oversize_margin: 0.006         # a surface longer than the longest part plus this is two parts
   crowd_reach: 0.008             # how far around the surface to look for that
+  touch_band: [0.006, 0.010]     # something seen this far beyond a surface's seen edge (4 mm inside the real one) touches it
   safe_crowd: 0.01               # a pick is safe with at most this share of the outline crowded, ...
   safe_offset: 0.003             # ... the cup this close to the surface center ...
   safe_tilt_deg: 5.0             # ... and the surface this level; risky picks wait until shaking brings no safe one

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from binpick.motion.ik import DOWN, solve_cup_down, yaw_of
-from binpick.motion.trajectory import cartesian_line, execute, joint_move
+from binpick.motion.trajectory import cartesian_line, cartesian_path, execute, joint_move
 from binpick.sim.scene import PARK_Q, build_scene
 from helpers import teleport_cup
 
@@ -105,3 +105,39 @@ def test_a_vertical_lift_is_really_vertical(empty, cfg, at):
     assert execute(empty, tr, watch)
     assert max(off) < 4e-4, max(off)
     assert np.degrees(max(rot)) < 0.12
+
+
+def test_path_with_a_corner_passes_its_points(empty, cfg):
+    lo, hi = empty.bin_inner_bounds()
+    p0 = np.r_[(lo + hi)[:2] / 2, lo[2] + 0.05]
+    q0 = teleport_cup(empty, p0)
+    pts = [p0, p0 + [0.0015, 0, 0.006], p0 + [0.0015, 0, 0.15]]
+    tr = cartesian_path(empty, q0, pts, DOWN, 0.0, cfg.motion)
+    d = mujoco.MjData(empty.model)
+    tip = []
+    for q in tr.q:
+        for j, v in zip(empty.arm_joint_names, q):
+            d.joint(j).qpos[0] = v
+        mujoco.mj_kinematics(empty.model, d)
+        tip.append(d.site(empty.cup_site).xpos - p0)
+    tip = np.array(tip)
+    assert np.allclose(tip[-1], pts[-1] - p0, atol=3e-4)
+    at6 = tip[np.argmin(np.abs(tip[:, 2] - 0.006))]
+    assert at6[0] == pytest.approx(0.0015, abs=4e-4)
+    assert np.abs(tip[:, 0]).max() < 0.0022 and np.all(np.diff(tip[:, 2]) >= -1e-6)
+
+
+@pytest.mark.parametrize("gain,worst", [(3.0, 0.45)])
+def test_sideways_hold_reduces_the_sag_under_a_load(empty, cfg, gain, worst):
+    """A 1.5 kg pull on the tool bends the arm sideways too; the joint readings show it."""
+    lo, hi = empty.bin_inner_bounds()
+    p0 = np.r_[(lo + hi)[:2] / 2, lo[2] + 0.2]
+    sag = []
+    for g in (0.0, gain):
+        q0 = teleport_cup(empty, p0)
+        body = empty.model.geom(empty.cup_geom).bodyid[0]
+        empty.data.xfrc_applied[body, 2] = -1.5 * 9.81
+        execute(empty, joint_move(q0, q0, cfg.motion), hold_s=0.5, sideways_gain=g)
+        empty.data.xfrc_applied[body, 2] = 0.0
+        sag.append(np.linalg.norm(empty.data.site(empty.cup_site).xpos[:2] - p0[:2]))
+    assert sag[0] > 3e-4 and sag[1] < worst * sag[0]

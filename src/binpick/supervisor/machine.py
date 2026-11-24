@@ -15,9 +15,9 @@ import numpy as np
 
 from binpick.motion.collision import CellCheck
 from binpick.motion.ik import DOWN, cup_rotation, solve_cup_pose, yaw_of
-from binpick.motion.trajectory import IKError, JointTrajectory, cartesian_line, execute, joint_move, reverse
+from binpick.motion.trajectory import IKError, JointTrajectory, cartesian_line, cartesian_path, execute, joint_move, reverse
 from binpick.planning.types import GraspTarget
-from binpick.sim.scene import PARK_X0, Scene
+from binpick.sim.scene import G, PARK_X0, PREFIX, Scene
 from binpick.sim.suction import SuctionCup
 from binpick.supervisor.placement import SlotAllocator, place_yaw, occupied_slots, referee_in_slot, verify_slot
 from binpick.supervisor.records import AttemptRecord
@@ -51,6 +51,7 @@ class Supervisor:
         self.last_target: GraspTarget | None = None
         self.last_success_sensed = False  # the robot's own verdict on the last attempt (not the referee's)
         self.set_down_felt = False  # contact was felt on the last set-down
+        self.felt_mass_kg = 0.0  # weight of the part, felt at the end of the lift
         self._watch_seal = False
         self._low_polls = 0
         self._k = 0
@@ -58,6 +59,7 @@ class Supervisor:
         assert r.ok, "layout.view_pos is unreachable"
         self._view_q = r.q
         m = scene.model
+        self._tool_kg = float(sum(m.body_mass[b] for b in range(m.nbody) if m.body(b).name in (PREFIX + "suction_tool", PREFIX + "cup_body")))
         names = [m.body(b).name for b in m.geom_bodyid]
         self._is_arm_geom = np.array([n.startswith("panda/") for n in names])
         self._is_part_geom = np.array([n.startswith("part_") for n in names])
@@ -84,8 +86,15 @@ class Supervisor:
                 return False
         return True
 
-    def _run(self, traj: JointTrajectory, hold_s: float | None = None) -> bool:
-        return execute(self.scene, traj, self._on_step, hold_s=hold_s)
+    def _run(self, traj: JointTrajectory, hold_s: float | None = None, sideways_gain: float = 0.0) -> bool:
+        return execute(self.scene, traj, self._on_step, hold_s=hold_s, sideways_gain=sideways_gain)
+
+    def _pull(self) -> float:
+        """Downward pull on the cup (N) that the arm's joint torques carry. Only meaningful at rest."""
+        m, d, J = self.scene.model, self.scene.data, np.zeros((6, self.scene.model.nv))
+        mujoco.mj_jacSite(m, d, J[:3], J[3:], self._tip)
+        tau = d.actuator_force[[m.actuator(a).id for a in self.scene.arm_actuator_names]]
+        return float((np.linalg.pinv(J[:, self._dofs].T) @ tau)[2]) - self._tool_kg * G
 
     def _wait(self, seconds: float) -> None:
         q = self._q()
@@ -249,9 +258,13 @@ class Supervisor:
             # Straight up, whatever the face tilt: lifting along a tilted normal drags parts that lean on
             # a wall (or a neighbour) into it. Cup orientation is kept.
             p1 = np.r_[p_grip[:2], max(clear_z, p_grip[2] + cfg.motion.lift_dist)]
-            ok = self._run(self._line(p_grip, p1, -n, self._grasp_yaw()))
-            if not ok:
+            # The first millimetres also go a little sideways, away from what touches the part.
+            side = p_grip + np.r_[np.asarray(target.away) * cfg.motion.lift_away, cfg.motion.lift_away_rise]
+            m = dataclasses.replace(cfg.motion, max_cart_acc=cfg.motion.lift_acc)
+            path = cartesian_path(scene, self._q(), [p_grip, side, np.r_[side[:2], p1[2]]], -n, self._grasp_yaw(), m)
+            if not self._run(path, sideways_gain=cfg.motion.lift_sideways_gain):
                 raise _Abort("seal_lost_lift")
+            self.felt_mass_kg = self._pull() / G
 
         phase("lift", lift)
         slot = self.slots.peek()
@@ -273,7 +286,9 @@ class Supervisor:
             if not r.ok:
                 raise IKError("pre-place unreachable")
             self._place_yaw, xy["cup"] = r.yaw, at(r.yaw)
-            if not self._run(joint_move(self._q(), r.q, cfg.motion, loaded=True)):
+            heavy = self.felt_mass_kg > cfg.motion.heavy_kg
+            m = dataclasses.replace(cfg.motion, max_joint_acc_loaded=cfg.motion.max_joint_acc_heavy) if heavy else cfg.motion
+            if not self._run(joint_move(self._q(), r.q, m, loaded=True)):
                 raise _Abort("seal_lost_transport")
 
         phase("transport", transport)

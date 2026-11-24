@@ -68,12 +68,15 @@ def test_seal_that_broke_during_the_grip_is_not_called_no_seal(cfg, monkeypatch)
     assert r.gripped_part == 0
 
 
-def test_arm_hitting_the_bin_is_a_collision_even_if_the_part_lands(cfg):
+def test_arm_hitting_the_bin_is_a_collision_even_if_the_part_lands(cfg, monkeypatch):
     s = _scene(cfg)
     (t,) = oracle_targets(s)
     lo, hi = s.bin_inner_bounds()
     wall = GraspTarget(None, np.array([lo[0] - 0.005, (lo[1] + hi[1]) / 2, hi[2] - 0.05]), t.normal, 0.0, 0.04, t.long_axis)
-    r = Supervisor(s, np.random.default_rng(0), seed=0).attempt(wall)  # cup comes down on the bin wall
+    sup = Supervisor(s, np.random.default_rng(0), seed=0)
+    assert sup.attempt(wall) is None  # normally the robot sees it coming ...
+    monkeypatch.setattr(sup.cell, "path_hits", lambda tr: False)
+    r = sup.attempt(wall)             # ... otherwise the cup comes down on the bin wall
     assert r.reason == "collision" and r.arm_hit_n > 50
 
 

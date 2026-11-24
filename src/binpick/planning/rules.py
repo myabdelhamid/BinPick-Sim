@@ -32,6 +32,7 @@ STEEP = 1.2        # slope up to which readings on a curved side are trusted (50
 FLANK = 0.6        # ... reached this far (share of the radius) to both sides of the axis
 CYL_RMS = 0.0005   # fit error that still counts as a cylinder
 CYL_R_MAX = 0.032  # thicker ones show their sides well enough
+SIDE_SHARE = 6.0   # one whole side of a square surface makes up about a sixth of the band around it
 CREASE_SPAN = 3   # lip steps (about 4 mm) over which a surface direction is measured
 
 
@@ -284,6 +285,23 @@ def _crowding(view: BinView, label: int, cfg: Config) -> float:
     return float((touched & outline).sum() / outline.sum())
 
 
+def free_direction(view: BinView, label: int, cfg: Config) -> np.ndarray:
+    """Horizontal direction (world xy) away from whatever is seen touching the part's sides: walls and neighbours of any
+    height. Length up to 1; about 0 if nothing touches or opposite sides do."""
+    k0, k1 = (int(round(x / view.cell)) for x in cfg.planner.touch_band)
+    mask = np.pad(view.labels == label, k1 + 1)
+    blocked = np.pad(view.z > view.lo[2] + cfg.perception.min_part_height, k1 + 1, constant_values=True)  # outside: wall
+    ij = np.argwhere(mask)
+    lo, hi = ij.min(axis=0) - k1 - 1, ij.max(axis=0) + k1 + 2
+    box = (slice(max(lo[0], 0), hi[0]), slice(max(lo[1], 0), hi[1]))
+    m, blocked = mask[box], blocked[box]
+    dist, near = ndimage.distance_transform_edt(~m, return_indices=True)
+    band = (dist >= k0) & (dist <= k1)
+    out = (np.indices(m.shape) - near)[:, band] / dist[band]  # unit vectors from the surface to each band cell
+    v = -(out * blocked[band]).sum(axis=1) / max(band.sum(), 1) * SIDE_SHARE
+    return v / max(1.0, float(np.linalg.norm(v)))
+
+
 def longest_part(cfg: Config) -> float:
     """Longest side any part can have (the cell's part catalogue)."""
     return max(cfg.parts.box_footprint[1], cfg.parts.cyl_length[1])
@@ -340,7 +358,7 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
             continue  # larger than any part: two parts the camera cannot tell apart
         seal = 1.0 - (1.0 - s.curve_limit_q) * drop[sel] / limit
         off = np.linalg.norm((pos[sel] - center)[:, :2], axis=1)
-        crowd = _crowding(view, c, cfg)
+        crowd, away = _crowding(view, c, cfg), free_direction(view, c, cfg)
         score = (pl.w_height * (pos[sel, 2] - view.lo[2]) / (view.hi[2] - view.lo[2]) + pl.w_seal * seal
                  + pl.w_wall * np.minimum(wall[sel] / pl.wall_saturation, 1.0)
                  - pl.w_center * off / r - pl.w_crowd * crowd)
@@ -352,7 +370,7 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
             out.append((bool(drop[g] > pl.flat_drop), GraspTarget(
                 None, pos[g], n[g], float(tilt[g]), max_depth(view, pos[g], n[g], cfg), axis, center,
                 float(seal[m]), float(score[m]), crowd,
-                bool(crowd <= pl.safe_crowd and off[m] <= pl.safe_offset and tilt[g] <= pl.safe_tilt_deg))))
+                bool(crowd <= pl.safe_crowd and off[m] <= pl.safe_offset and tilt[g] <= pl.safe_tilt_deg), away)))
             kept += 1
             if kept == pl.per_surface:
                 break
