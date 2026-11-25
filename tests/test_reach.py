@@ -123,3 +123,15 @@ def test_ik_solver_failure_is_an_unreachable_pose_not_a_crash(cfg, monkeypatch):
     s = build_scene(cfg, [])
     monkeypatch.setattr(mink, "solve_ik", boom)
     assert not solve_cup_pose(s, np.array([0.5, 0.0, 0.3]), DOWN, 0.0).ok
+
+
+def test_wrist_is_not_solved_at_its_limit_when_the_other_turn_is_free(scene):
+    """Cup yaw is free by half a turn: choose the turn that leaves joint 7 room for what follows."""
+    from binpick.motion.ik import solve_cup_pose
+
+    lim = np.array([scene.model.joint(j).range for j in scene.arm_joint_names])
+    c = scene.slot_centers[1]
+    for yaw in np.linspace(-np.pi, np.pi, 17):
+        r = solve_cup_pose(scene, np.r_[c[:2], c[2] + 0.15], np.array([0, 0, -1.0]), yaw)
+        assert r.ok
+        assert min((r.q - lim[:, 0]).min(), (lim[:, 1] - r.q).min()) > 0.10, yaw

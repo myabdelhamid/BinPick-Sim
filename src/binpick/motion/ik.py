@@ -10,6 +10,7 @@ import numpy as np
 from binpick.sim.scene import Scene
 
 # Elbow-up seed; joint1 is aimed at the target before solving.
+LIMIT_MARGIN = 0.15  # rad; a joint closer to its limit than this may not be able to follow the next line
 READY_Q = np.array([0.0, -0.2, 0.0, -2.0, 0.0, 1.8, 0.7854])
 
 
@@ -60,7 +61,9 @@ def solve_cup_pose(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarra
     if len(ok) == 1:
         return ok[0]
     ref = np.array([scene.data.joint(j).qpos[0] for j in scene.arm_joint_names]) if q0 is None else q0
-    return min(ok, key=lambda r: float(np.abs(r.q - ref).max()))  # the equivalent yaw needing least motion
+    lim = np.array([scene.model.joint(j).range for j in scene.arm_joint_names])
+    at_limit = lambda r: bool(np.minimum(r.q - lim[:, 0], lim[:, 1] - r.q).min() < LIMIT_MARGIN)  # noqa: E731
+    return min(ok, key=lambda r: (at_limit(r), float(np.abs(r.q - ref).max())))  # room to move on, then least motion
 
 
 def _solve(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarray, yaw: float, q0: np.ndarray | None,

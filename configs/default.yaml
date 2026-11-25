@@ -90,11 +90,14 @@ motion:
   lift_away: 0.0015              # m, sideways shift away from a wall the part touches ...
   lift_away_rise: 0.006          # ... over the first 6 mm of the lift
   lift_sideways_gain: 3.0        # sideways stiffness added from the joint readings while lifting
-  heavy_kg: 1.2                  # a part felt to be heavier than this ...
-  max_joint_acc_heavy: 2.0       # ... is carried at this acceleration
+  carry_acc_kg: 2.6              # rad/s^2 x kg: carrying acceleration = this x seal / felt weight, ...
+  carry_acc_min: 1.2             # ... at least
+  carry_acc_max: 6.0             # ... at most
+  clear_tray: 0.020              # height margin over the tallest part that can stand in the tray
   clear_above_rim: 0.05          # transport height margin above rim + part height
   place_clearance: 0.014         # start feeling for the tray this far above where the part could touch (the first 0.12 s of the probe is blind)
-  retreat_dist: 0.10
+  retreat_dist: 0.10             # after a failure
+  retreat_min: 0.03              # after a release
   touch_start: 0.012             # slow down this far before the surface and feel for contact
   touch_past: 0.006              # give up this far past where the surface should be
   guard_force_n: 25.0            # force on the cup that the measured motion does not explain and that stops an approach

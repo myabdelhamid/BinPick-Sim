@@ -31,3 +31,16 @@ class CellCheck:
     def path_hits(self, tr: JointTrajectory) -> bool:
         n = max(2, int(np.ceil(tr.duration / PATH_STEP_S)) + 1)
         return any(self.hits(tr.sample(t)) for t in np.linspace(0, tr.duration, n))
+
+    def clears_rim(self, tr: JointTrajectory, hang: float, reach: float) -> bool:
+        """Does a part reaching `hang` below the cup and `reach` sideways stay above the bin's rim while it is over or
+        next to the bin?"""
+        m, d = self._cell.model, self._cell.data
+        lo, hi = self._cell.bin_inner_bounds()
+        for t in np.linspace(0, tr.duration, max(2, int(np.ceil(tr.duration / PATH_STEP_S)) + 1)):
+            d.qpos[self._adr] = tr.sample(t)
+            mujoco.mj_kinematics(m, d)
+            p = d.site(self._cell.cup_site).xpos
+            if np.all(p[:2] > lo[:2] - reach) and np.all(p[:2] < hi[:2] + reach) and p[2] - hang < hi[2]:
+                return False
+        return True

@@ -16,6 +16,7 @@ import numpy as np
 from binpick.motion.collision import CellCheck
 from binpick.motion.ik import DOWN, cup_rotation, solve_cup_pose, yaw_of
 from binpick.motion.trajectory import IKError, JointTrajectory, cartesian_line, cartesian_path, execute, joint_move, reverse
+from binpick.planning.rules import longest_part
 from binpick.planning.types import GraspTarget
 from binpick.sim.scene import G, PARK_X0, PREFIX, Scene
 from binpick.sim.suction import SuctionCup
@@ -27,6 +28,7 @@ PROBE_BLANK_S = 0.12     # contact probing ignores the start of the move (the ar
 PROBE_WINDOW_S = 0.02    # lag is compared with its mean 20-40 ms earlier
 SHAKE_RAMP_S = 0.3
 ARM_HIT_MIN_N = 50.0     # scoring: arm or tool hitting the cell harder than this is a collision
+LEAN_M = 0.10            # last part of a lift that leans inward: this far, over this much height
 GUARD_VEL_STEPS = 5      # joint accelerations are taken over this many control steps (10 ms)
 GUARD_STEPS = 5          # an unexplained force must last this many control steps (10 ms)
 SEAL_POLL_STEPS = 10     # read the vacuum sensor every 10 physics steps (20 ms)
@@ -91,7 +93,7 @@ class Supervisor:
     def _run(self, traj: JointTrajectory, hold_s: float | None = None, sideways_gain: float = 0.0) -> bool:
         return execute(self.scene, traj, self._on_step, hold_s=hold_s, sideways_gain=sideways_gain)
 
-    def _guarded(self, traj: JointTrajectory) -> None:
+    def _guarded(self, traj: JointTrajectory, hold_s: float | None = None) -> None:
         """Move with the empty cup; stop if the joints carry a force on the cup that the motion does not explain."""
         scene, m, d = self.scene, self.scene.model, self.scene.data
         J, ids = np.zeros((3, m.nv)), [m.actuator(a).id for a in scene.arm_actuator_names]
@@ -113,7 +115,7 @@ class Supervisor:
             over = over + 1 if np.linalg.norm(f) > scene.cfg.motion.guard_force_n else 0
             return over < GUARD_STEPS
 
-        if not execute(scene, traj, step):
+        if not execute(scene, traj, step, hold_s=hold_s):
             raise _Abort("collision")
 
     def _pull(self) -> float:
@@ -204,7 +206,7 @@ class Supervisor:
         self._way_in = plan["approach"]
         self._held_part, self._arm_hit_n = None, 0.0
         try:
-            phase("approach", lambda: (self._guarded(joint_move(self._q(), plan["hover_q"], cfg.motion)),
+            phase("approach", lambda: (self._guarded(joint_move(self._q(), plan["hover_q"], cfg.motion), hold_s=0.0),
                                        self._guarded(plan["approach"]),
                                        self._probe(plan["near"], target.pos - n * cfg.motion.touch_past, -n, plan["yaw"],
                                                    cfg.motion.touch_speed, loaded=False)))
@@ -214,9 +216,9 @@ class Supervisor:
             rec.slot, self._pending_slot, rec.released = self._pending_slot, None, True
             self.slots.commit()
             p, _ = self._cup_pose()
-            phase("retreat", lambda: (self._run(self._line(p, p + [0, 0, cfg.motion.retreat_dist], DOWN,
-                                                             self._place_yaw, loaded=False)),
-                                      self._to_view()))
+            # straight up until the cup is above the tallest part that can stand in the tray
+            up = np.r_[p[:2], max(p[2] + cfg.motion.retreat_min, scene.slot_centers[rec.slot][2] + longest_part(cfg) + cfg.motion.clear_tray)]
+            phase("retreat", lambda: (self._run(self._line(p, up, DOWN, self._place_yaw, loaded=False), hold_s=0.0), self._to_view()))
 
             def verify():
                 self._wait(cfg.timing.verify_s)
@@ -288,7 +290,7 @@ class Supervisor:
             # The first millimetres also go a little sideways, away from a wall the part touches.
             side = p_grip + np.r_[np.asarray(target.away) * cfg.motion.lift_away, cfg.motion.lift_away_rise]
             m = dataclasses.replace(cfg.motion, max_cart_acc=cfg.motion.lift_acc)
-            path = cartesian_path(scene, self._q(), [p_grip, side, np.r_[side[:2], p1[2]]], R_grip[:, 2], self._grasp_yaw(), m)
+            path = self._lift_path([p_grip, side, np.r_[side[:2], p1[2]]], R_grip[:, 2], m)
             if not self._run(path, sideways_gain=cfg.motion.lift_sideways_gain):
                 raise _Abort("seal_lost_lift")
             self.felt_mass_kg = rec.felt_kg = self._pull() / G
@@ -301,34 +303,58 @@ class Supervisor:
         slot_c = scene.slot_centers[slot]
         self._place_yaw = place_yaw(long_cup)
         top = slot_c[2] + target.depth + cfg.motion.place_clearance  # cup height that surely clears the tray
-        pre_z = max(clear_z, top + cfg.motion.pregrasp_dist)
-        xy = {}
+        # lowest carrying height at the slot: over the tallest part that can stand in the tray
+        low_z = max(top, slot_c[2] + longest_part(cfg) + target.depth + cfg.motion.clear_tray)
+        chosen: dict = {}
 
         def transport():
             # the part's center, not the cup, goes to the slot center (the wrist may turn by pi, so solve twice)
             at = lambda yaw: slot_c[:2] - (cup_rotation(DOWN, yaw) @ np.r_[offset_cup[:2], 0.0])[:2]  # noqa: E731
-            r = self._ik_min_motion(np.r_[at(self._place_yaw), pre_z], DOWN, self._place_yaw)
-            if r.ok:
-                r = self._ik_min_motion(np.r_[at(r.yaw), pre_z], DOWN, r.yaw)
-            if not r.ok:
+            m = dataclasses.replace(cfg.motion, max_joint_acc_loaded=self._carry_acc(target.seal))
+            for z in np.linspace(min(low_z, clear_z), max(low_z, clear_z), 3):  # as low as clears the rim on the way
+                r = self._ik_min_motion(np.r_[at(self._place_yaw), z], DOWN, self._place_yaw)
+                if r.ok:
+                    r = self._ik_min_motion(np.r_[at(r.yaw), z], DOWN, r.yaw)
+                if not r.ok:
+                    continue
+                move = joint_move(self._q(), r.q, m, loaded=True)
+                chosen.update(move=move, cup=at(r.yaw), z=z, yaw=r.yaw, m=m)
+                if self.cell.clears_rim(move, target.depth + cfg.motion.clear_tray, longest_part(cfg)):
+                    break
+            if not chosen:
                 raise IKError("pre-place unreachable")
-            self._place_yaw, xy["cup"] = r.yaw, at(r.yaw)
-            heavy = self.felt_mass_kg > cfg.motion.heavy_kg
-            m = dataclasses.replace(cfg.motion, max_joint_acc_loaded=cfg.motion.max_joint_acc_heavy) if heavy else cfg.motion
-            if not self._run(joint_move(self._q(), r.q, m, loaded=True)):
+            self._place_yaw = chosen["yaw"]
+            if not self._run(chosen["move"]):
                 raise _Abort("seal_lost_transport")
 
         phase("transport", transport)
 
         def place():
-            c = xy["cup"]
-            self._way_in = self._line(np.r_[c, pre_z], np.r_[c, top], DOWN, self._place_yaw)
+            c = chosen["cup"]
+            self._way_in = cartesian_line(scene, self._q(), np.r_[c, chosen["z"]], np.r_[c, top], DOWN, self._place_yaw, chosen["m"])
             if not self._run(self._way_in):
                 raise _Abort("seal_lost_transport")
             self._set_down(c, top, slot_c[2])
             self._watch_seal = False
 
         phase("place", place)
+
+    def _carry_acc(self, seal: float) -> float:
+        """Joint acceleration for carrying: what the grip can spare after holding the weight felt."""
+        m = self.scene.cfg.motion
+        return float(np.clip(m.carry_acc_kg * seal / max(self.felt_mass_kg, 1e-3), m.carry_acc_min, m.carry_acc_max))
+
+    def _lift_path(self, points: list, axis: np.ndarray, m) -> JointTrajectory:
+        """Straight up; if the top is out of the arm's reach, the last part leans toward the robot."""
+        yaw = self._grasp_yaw()
+        try:
+            return cartesian_path(self.scene, self._q(), points, axis, yaw, m)
+        except IKError:
+            top = points[-1]
+            inward = np.asarray(self.scene.cfg.layout.robot_base_pos)[:2] - top[:2]
+            step = LEAN_M * inward / np.linalg.norm(inward)
+            knee = np.r_[top[:2], max(top[2] - LEAN_M, points[-2][2] + 1e-3)]
+            return cartesian_path(self.scene, self._q(), [*points[:-1], knee, np.r_[top[:2] + step, top[2]]], axis, yaw, m)
 
     def _probe(self, p0: np.ndarray, p1: np.ndarray, axis: np.ndarray, yaw: float, speed: float,
                loaded: bool) -> tuple[bool, bool]:

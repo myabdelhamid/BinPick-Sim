@@ -1,3 +1,5 @@
+import dataclasses
+
 import mujoco
 import numpy as np
 import pytest
@@ -139,4 +141,64 @@ def test_heavy_part_is_felt_and_moved_gently(cfg):
         assert rec.outcome == "success"
         assert sup.felt_mass_kg == pytest.approx(mass, abs=0.15)
         times[mass] = rec.phase_times["transport"]
-    assert times[1.6] > 1.1 * times[0.3]
+    assert times[1.6] > 1.3 * times[0.3]
+
+
+def test_lift_at_the_far_bin_edge_goes_inward_when_straight_up_is_out_of_reach(cfg):
+    ix, iy = cfg.bin.inner[:2]
+    for xy in ((ix / 2 - 0.045, -0.09), (ix / 2 - 0.045, 0.10)):
+        spec = PartSpec(0, "box", "plastic", (0.08, 0.08, 0.06), 0.4)
+        s = single_part_scene(cfg, spec, xy_offset=xy)
+        a = s.part_qpos_adr[0]
+        s.data.qpos[a + 2] = s.bin_inner_bounds()[0][2] + 0.03
+        for _ in range(100):
+            mujoco.mj_step(s.model, s.data)
+        t = oracle_targets(s)[0]
+        t = dataclasses.replace(t, depth=0.11)  # a camera cannot know the part is thinner
+        sup = Supervisor(s, np.random.default_rng(0), seed=0)
+        rec = sup.attempt(t)
+        assert rec.outcome == "success", (xy, rec.reason)
+
+
+def test_light_parts_are_carried_faster_than_heavy_ones(cfg):
+    acc = {}
+    for kg in (0.1, 0.5, 1.0, 1.7):
+        s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.04), 0.3))
+        sup = Supervisor(s, np.random.default_rng(0), seed=0)
+        sup.felt_mass_kg = kg
+        acc[kg] = (sup._carry_acc(1.0), sup._carry_acc(0.8))
+    assert acc[0.1][0] >= acc[0.5][0] > acc[1.0][0] > acc[1.7][0] >= cfg.motion.carry_acc_min
+    assert acc[0.1][0] <= cfg.motion.carry_acc_max and acc[1.0][1] < acc[1.0][0]
+
+
+@pytest.mark.parametrize("slot", [0, 10, 15])
+def test_heaviest_cylinder_gripped_on_its_side_is_not_dropped(cfg, slot):
+    s = single_part_scene(cfg, PartSpec(0, "cylinder", "steel", (0.0614, 0.0725), 1.69), quat=quat_axis_angle([1, 0, 0], np.pi / 2), xy_offset=(0.1, 0.05))
+    s.data.qpos[s.part_qpos_adr[0] + 2] = s.bin_inner_bounds()[0][2] + 0.0614 / 2
+    for _ in range(200):
+        mujoco.mj_step(s.model, s.data)
+    sup = Supervisor(s, np.random.default_rng(0), seed=0)
+    for k in range(slot):
+        sup.slots.mark_used(k)
+    t = dataclasses.replace(oracle_targets(s)[0], seal=0.83)
+    assert sup.attempt(t).outcome == "success"
+
+
+def test_part_and_cup_clear_the_rim_and_the_tray_parts_on_the_way(cfg):
+    """Highest allowed part: whatever hangs under the cup must clear the rim near the bin and 110 mm parts in the tray."""
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.06, 0.06, 0.069), 0.3))
+    for _ in range(100):
+        mujoco.mj_step(s.model, s.data)
+    low = []
+    b = s.part_body_ids[0]
+    lo, hi = s.bin_inner_bounds()
+
+    def watch(sc, ph):
+        if ph == "transport":
+            p, z = sc.data.xpos[b][:2], sc.data.xpos[b][2] - 0.0345
+            near_bin = np.all(p > lo[:2] - 0.09) and np.all(p < hi[:2] + 0.09)
+            low.append((near_bin, z))
+
+    Supervisor(s, np.random.default_rng(0), seed=0, observer=watch).attempt(oracle_targets(s)[0])
+    assert min(z for n, z in low if n) > hi[2] + 0.02
+    assert min(z for _, z in low) > s.slot_centers[0][2] + 0.115

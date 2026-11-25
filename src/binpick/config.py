@@ -183,11 +183,14 @@ class MotionConfig:
     lift_away: float
     lift_away_rise: float
     lift_sideways_gain: float
-    heavy_kg: float
-    max_joint_acc_heavy: float
+    carry_acc_kg: float
+    carry_acc_min: float
+    carry_acc_max: float
+    clear_tray: float
     clear_above_rim: float
     place_clearance: float
     retreat_dist: float
+    retreat_min: float
     touch_start: float
     touch_past: float
     guard_force_n: float
