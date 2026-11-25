@@ -29,6 +29,7 @@ MIN_CURVED = 0.03  # spread of the normals across the axis from which a surface 
 FACE_TOL = 0.0015  # seen points this close to its plane belong to it
 FACE_FILL = 0.8    # share of the fitted rectangle that must be seen
 EDGE_STRIP = 0.0015  # this close to the fitted edge a seen drop may be the edge itself
+MAX_SIDE_DEG = 25.0  # how far down a cylinder's side a cup is tried
 STEEP = 1.2        # slope up to which readings on a curved side are trusted (50 deg) ...
 FLANK = 0.6        # ... reached this far (share of the radius) to both sides of the axis
 CYL_RMS = 0.0005   # fit error that still counts as a cylinder
@@ -176,6 +177,18 @@ def _continue_face(z: np.ndarray, flat: np.ndarray, face: Face) -> np.ndarray:
     inside = np.minimum(face.half[0] - np.abs(d @ face.a), face.half[1] - np.abs(d @ face.b))
     use = (inside >= 0) & ~(z > model + FACE_TOL) & ~((z < model - FACE_TOL) & (inside > EDGE_STRIP))
     return np.where(use, model, z)
+
+
+def _lip_could_fit(pos: np.ndarray, lab: np.ndarray, faces: dict[int, Face | None], r: float) -> np.ndarray:
+    """Cheap first pass: on a face with known edges, points where the lip would hang over one need no closer look."""
+    ok = np.ones(len(pos), bool)
+    for k, f in faces.items():
+        if f is not None:
+            sel = lab == k
+            ok[sel] = _room(f, pos[sel], r) > -FACE_TOL
+            if f.radius is not None:  # off the top line a cylinder only tilts the cup
+                ok[sel] &= np.abs((pos[sel] - f.center) @ f.b) < f.radius * np.sin(np.deg2rad(MAX_SIDE_DEG))
+    return ok
 
 
 def _room(face: Face | None, pos: np.ndarray, r: float) -> np.ndarray:
@@ -410,7 +423,7 @@ def rules_targets(view: BinView, cfg: Config, avoid: Sequence[np.ndarray] = (),
     pos = np.vstack([np.column_stack([view.xy(ij), view.z[tuple(ij.T)]]),
                      np.column_stack([np.array([c[:2] for c in centers.values()]).reshape(-1, 2), view.z[tuple(cij.T)]])])
     n = np.vstack([view.normals[tuple(ij.T)], view.normals[tuple(cij.T)]])
-    ok = n[:, 2] > np.cos(np.deg2rad(60))
+    ok = (n[:, 2] > np.cos(np.deg2rad(60))) & _lip_could_fit(pos, lab, faces, r)
     pos, n, lab = pos[ok], n[ok], lab[ok]
     for _ in range(2):  # align the cup with the plane under it
         if len(pos) == 0:

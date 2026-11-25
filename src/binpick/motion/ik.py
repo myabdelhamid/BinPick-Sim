@@ -68,13 +68,14 @@ def solve_cup_pose(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarra
 
 def _solve(scene: Scene, target_pos: np.ndarray, approach_dir: np.ndarray, yaw: float, q0: np.ndarray | None,
            pos_tol: float, rot_tol: float, max_iters: int) -> IKResult:
-    model = scene.model
-    arm_adr = [int(model.jnt_qposadr[model.joint(j).id]) for j in scene.arm_joint_names]
-    q_full = scene.data.qpos.copy()
+    cell = scene.empty_cell()  # the arm's own model: same kinematics, far fewer unknowns
+    model = cell.model
+    arm_adr = [int(model.jnt_qposadr[model.joint(j).id]) for j in cell.arm_joint_names]
     if q0 is None:
         base = np.asarray(scene.cfg.layout.robot_base_pos)
         q0 = READY_Q.copy()
         q0[0] = np.arctan2(target_pos[1] - base[1], target_pos[0] - base[0])
+    q_full = np.zeros(model.nq)
     q_full[arm_adr] = q0
 
     cfg = mink.Configuration(model, q_full)

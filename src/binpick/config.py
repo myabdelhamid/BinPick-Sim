@@ -170,7 +170,7 @@ class SimConfig:
 @dataclass(frozen=True)
 class MotionConfig:
     max_joint_vel: tuple[float, ...]
-    max_joint_acc: float
+    max_joint_acc: tuple[float, ...]
     max_joint_acc_loaded: float
     max_cart_vel: float
     max_cart_acc: float
@@ -204,7 +204,10 @@ class MotionConfig:
         object.__setattr__(self, "max_joint_vel", tuple(float(v) for v in self.max_joint_vel))
         if len(self.max_joint_vel) != 7 or min(self.max_joint_vel) <= 0:
             raise ValueError("max_joint_vel: need 7 positive values")
-        _positive(self, "max_joint_acc", "max_joint_acc_loaded", "max_cart_vel", "max_cart_acc",
+        object.__setattr__(self, "max_joint_acc", tuple(float(v) for v in self.max_joint_acc))
+        if len(self.max_joint_acc) != 7 or min(self.max_joint_acc) <= 0:
+            raise ValueError("max_joint_acc: need 7 positive values")
+        _positive(self, "max_joint_acc_loaded", "max_cart_vel", "max_cart_acc",
                   "max_cart_acc_empty", "cart_step", "pregrasp_dist", "lift_dist", "retreat_dist", "probe_speed", "probe_lag")
 
 

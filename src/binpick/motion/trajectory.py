@@ -84,10 +84,13 @@ def _profile(T: float, Ta: float, n: int) -> np.ndarray:
     return np.clip(np.interp(t, fine, x / x[-1]), 0.0, 1.0)
 
 
+def _joint_acc(m: MotionConfig, loaded: bool) -> tuple[float, ...]:
+    return tuple(min(a, m.max_joint_acc_loaded) for a in m.max_joint_acc) if loaded else m.max_joint_acc
+
+
 def joint_move(q0: np.ndarray, q1: np.ndarray, m: MotionConfig, loaded: bool = False) -> JointTrajectory:
     q0, q1 = np.asarray(q0, float), np.asarray(q1, float)
-    acc = m.max_joint_acc_loaded if loaded else m.max_joint_acc
-    T, Ta = _time_scale([(abs(d), v, acc) for d, v in zip(q1 - q0, m.max_joint_vel)])
+    T, Ta = _time_scale([(abs(d), v, a) for d, v, a in zip(q1 - q0, m.max_joint_vel, _joint_acc(m, loaded))])
     n = int(np.ceil(T / SAMPLE_DT)) + 1
     s = _profile(T, Ta, n)[:, None]
     return JointTrajectory(np.linspace(0, T, n), q0 + s * (q1 - q0))
@@ -120,19 +123,19 @@ def cartesian_path(scene: Scene, q0: np.ndarray, points: list, approach_dir: np.
     qs = np.array(qs)
     jdist = np.abs(np.diff(qs, axis=0)).sum(axis=0)
     cart_acc = m.max_cart_acc if loaded else m.max_cart_acc_empty
-    joint_acc = m.max_joint_acc_loaded if loaded else m.max_joint_acc
     T, Ta = _time_scale([(dist[-1], m.max_cart_vel, cart_acc)]
-                        + [(float(d), v, joint_acc) for d, v in zip(jdist, m.max_joint_vel)])
+                        + [(float(d), v, a) for d, v, a in zip(jdist, m.max_joint_vel, _joint_acc(m, loaded))])
     if dist[-1] <= 0:
         return JointTrajectory(np.array([0.0, T]), np.repeat(qs[:1], 2, axis=0))
     spline = CubicSpline(dist, qs)
     for _ in range(4):  # near a singularity the joints move unevenly: slow down until the peak is within the limit
         n = int(np.ceil(T / SAMPLE_DT)) + 1
         tr = JointTrajectory(np.linspace(0, T, n), spline(_profile(T, Ta, n) * dist[-1]))
-        peak = np.abs(np.diff(tr.q, n=2, axis=0)).max() / (T / (n - 1)) ** 2 if n > 2 else 0.0
-        if peak <= m.max_joint_acc * 1.1:
+        acc = np.abs(np.diff(tr.q, n=2, axis=0)) / (T / (n - 1)) ** 2
+        over = (acc / np.array(m.max_joint_acc)).max() if n > 2 else 0.0
+        if over <= 1.1:
             break
-        k = np.sqrt(peak / m.max_joint_acc)
+        k = np.sqrt(over)
         T, Ta = T * k, Ta * k
     return tr
 

@@ -27,7 +27,7 @@ def test_joint_move_limits(cfg):
     v = np.diff(tr.q, axis=0) / dt
     a = np.diff(v, axis=0) / dt[1:]
     assert np.all(np.abs(v).max(axis=0) <= np.array(cfg.motion.max_joint_vel) * 1.01)
-    assert np.abs(a).max() <= cfg.motion.max_joint_acc * 1.05
+    assert np.all(np.abs(a).max(axis=0) <= np.array(cfg.motion.max_joint_acc) * 1.05)
 
 
 def test_cartesian_line_is_straight_and_limited(empty, cfg):
@@ -178,6 +178,21 @@ def test_line_near_a_singularity_keeps_the_joint_acceleration_limit(empty, cfg):
         except IKError:
             continue
         a = np.diff(tr.q, n=2, axis=0) / np.diff(tr.t).mean() ** 2
-        assert np.abs(a).max() <= cfg.motion.max_joint_acc * 1.15
+        assert np.all(np.abs(a).max(axis=0) <= np.array(cfg.motion.max_joint_acc) * 1.15)
         checked += 1
     assert checked >= 15
+
+
+def test_fast_moves_stay_within_the_motors_torque_limits(empty, cfg):
+    """Datasheet accelerations must not saturate the joint motors (87 / 12 Nm)."""
+    lo, hi = empty.bin_inner_bounds()
+    ids = [empty.model.actuator(a).id for a in empty.arm_actuator_names]
+    limit, worst = empty.model.actuator_forcerange[ids, 1], np.zeros(7)
+
+    def watch(s):
+        worst[:] = np.maximum(worst, np.abs(s.data.actuator_force[ids]))
+        return True
+
+    for p in ((hi[0] - 0.05, lo[1] + 0.05), (lo[0] + 0.05, hi[1] - 0.05), (0.0, 0.5), (-0.24, 0.65)):
+        execute(empty, joint_move(_arm_q(empty), solve_cup_down(empty, np.r_[p, 0.35]).q, cfg.motion), watch)
+    assert np.all(worst < 0.9 * limit), worst / limit
