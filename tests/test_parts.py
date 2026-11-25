@@ -5,7 +5,7 @@ from binpick.sim.parts import part_volume, sample_parts
 
 
 def test_counts_and_ranges(cfg):
-    ps = sample_parts(cfg.parts, np.random.default_rng([1, 0]))
+    ps = sample_parts(cfg.parts, np.random.default_rng([1001, 0]))
     assert [p.shape for p in ps].count("box") == 15
     assert [p.shape for p in ps].count("cylinder") == 5
     assert [p.id for p in ps] == list(range(20))
@@ -26,8 +26,8 @@ def test_deterministic(cfg, seed):
 
 
 def test_seeds_differ(cfg):
-    a = sample_parts(cfg.parts, np.random.default_rng([1, 0]))
-    b = sample_parts(cfg.parts, np.random.default_rng([2, 0]))
+    a = sample_parts(cfg.parts, np.random.default_rng([1001, 0]))
+    b = sample_parts(cfg.parts, np.random.default_rng([1002, 0]))
     assert a != b
 
 

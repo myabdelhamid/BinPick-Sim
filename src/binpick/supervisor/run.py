@@ -111,7 +111,7 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
 
     # ---- scoring (ground truth)
     mujoco.mj_forward(scene.model, scene.data)
-    slot_of = {r.gripped_part: r.slot for r in sup.records if r.outcome == "success"}
+    slot_of = {r.gripped_part: r.slot for r in sup.records if r.referee_ok}  # also a part that fell into its slot
     in_slot = {i for i, slot in slot_of.items() if referee_in_slot(scene, i, slot)}
     lo, hi = scene.bin_inner_bounds()
     n = len(scene.parts)

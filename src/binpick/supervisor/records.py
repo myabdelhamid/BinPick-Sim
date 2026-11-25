@@ -18,7 +18,8 @@ class AttemptRecord:
     target_part: int | None
     gripped_part: int | None = None      # ground truth: what the cup actually held (may differ from target)
     slot: int | None = None
-    outcome: str = "fail"                # "success" only if the referee finds the part in its slot
+    released: bool = False               # the robot itself set the part down and let go of it
+    outcome: str = "fail"                # "success" only if released and the referee finds the part in its slot
     reason: str = ""                     # root cause (one of REASONS) when outcome == "fail"
     sensed: str = ""                     # what the supervisor's own sensors concluded (may differ from reason)
     detected: bool = True                # supervisor's own sensors agreed with the outcome
@@ -37,7 +38,7 @@ class AttemptRecord:
 
 def write_csv(records: list[AttemptRecord], path: str | Path) -> None:
     cols = ["seed", "attempt", "target_part", "gripped_part", "slot", "outcome", "reason", "sensed", "detected",
-            "verify_ok", "referee_ok", "lost_parts", "cycle_time_s", "tilt_deg", "est_seal", "arm_hit_n", "safe", "crowd", "felt_kg"] + [f"t_{p}" for p in PHASES]
+            "verify_ok", "referee_ok", "lost_parts", "cycle_time_s", "tilt_deg", "est_seal", "arm_hit_n", "safe", "crowd", "felt_kg", "released"] + [f"t_{p}" for p in PHASES]
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
@@ -46,5 +47,5 @@ def write_csv(records: list[AttemptRecord], path: str | Path) -> None:
                         "" if r.slot is None else r.slot, r.outcome, r.reason, r.sensed, int(r.detected),
                         int(r.verify_ok),
                         int(r.referee_ok), ";".join(map(str, r.lost_parts)), f"{r.cycle_time_s:.3f}",
-                        f"{r.tilt_deg:.1f}", f"{r.est_seal:.3f}", f"{r.arm_hit_n:.0f}", int(r.safe), f"{r.crowd:.3f}", f"{r.felt_kg:.2f}"]
+                        f"{r.tilt_deg:.1f}", f"{r.est_seal:.3f}", f"{r.arm_hit_n:.0f}", int(r.safe), f"{r.crowd:.3f}", f"{r.felt_kg:.2f}", int(r.released)]
                        + [f"{r.phase_times.get(p, 0.0):.3f}" for p in PHASES])

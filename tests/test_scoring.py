@@ -84,3 +84,56 @@ def test_normal_pick_has_no_arm_hit(cfg):
     s = _scene(cfg)
     r = Supervisor(s, np.random.default_rng(0), seed=0).attempt(oracle_targets(s)[0])
     assert r.outcome == "success" and r.arm_hit_n == 0.0
+
+
+def test_part_dropped_into_its_slot_is_a_failed_attempt_but_a_placed_part(cfg, monkeypatch):
+    """The arm gave up during set-down and let go; the part happened to land in tolerance."""
+    s = _scene(cfg)
+
+    def give_up(self, *a, **k):
+        raise machine.IKError("test")
+
+    monkeypatch.setattr(Supervisor, "_set_down", give_up)
+    from binpick.supervisor.run import run_bin
+
+    r = run_bin(s, "rules", seed=0, max_attempts=1)
+    x = r.records[0]
+    assert x.referee_ok and x.outcome == "fail" and x.reason == "ik_fail" and not x.released
+    assert r.placed == 1 and r.part_state == ["placed"]
+
+
+def test_arm_trouble_after_the_release_does_not_undo_a_placement(cfg, monkeypatch):
+    s = _scene(cfg)
+    (t,) = oracle_targets(s)
+    sup = Supervisor(s, np.random.default_rng(0), seed=0)
+    real, failed = sup._line, []
+
+    def no_retreat(p0, p1, *a, **k):
+        if sup._phase == "retreat" and not failed:
+            failed.append(True)
+            raise machine.IKError("test")
+        return real(p0, p1, *a, **k)
+
+    monkeypatch.setattr(sup, "_line", no_retreat)
+    r = sup.attempt(t)
+    assert r.released and r.outcome == "success"
+
+
+def test_recovery_over_the_tray_goes_up_before_going_anywhere(cfg, monkeypatch):
+    s = _scene(cfg)
+    (t,) = oracle_targets(s)
+    sup = Supervisor(s, np.random.default_rng(0), seed=0)
+    real, tips = sup._line, []
+
+    def no_retreat(p0, p1, *a, **k):
+        if sup._phase == "retreat":
+            raise machine.IKError("test")
+        return real(p0, p1, *a, **k)
+
+    monkeypatch.setattr(sup, "_line", no_retreat)
+    sup.observer = lambda sc, ph: tips.append(sc.data.site(sc.cup_site).xpos.copy()) if ph == "retreat" else None
+    r = sup.attempt(t)
+    tips = np.array(tips)
+    low = tips[tips[:, 2] < 0.10]
+    assert len(low) and np.ptp(low[:, :2], axis=0).max() < 0.02
+    assert r.outcome == "success" and r.arm_hit_n == 0

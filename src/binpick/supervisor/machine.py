@@ -211,7 +211,7 @@ class Supervisor:
             self._grip(phase, rec)
             self._lift_transport_place(phase, rec, target, n)
             phase("release", lambda: (self.cup.off(), self._wait(cfg.timing.release_s)))
-            rec.slot, self._pending_slot = self._pending_slot, None
+            rec.slot, self._pending_slot, rec.released = self._pending_slot, None, True
             self.slots.commit()
             p, _ = self._cup_pose()
             phase("retreat", lambda: (self._run(self._line(p, p + [0, 0, cfg.motion.retreat_dist], DOWN,
@@ -322,7 +322,8 @@ class Supervisor:
 
         def place():
             c = xy["cup"]
-            if not self._run(self._line(np.r_[c, pre_z], np.r_[c, top], DOWN, self._place_yaw)):
+            self._way_in = self._line(np.r_[c, pre_z], np.r_[c, top], DOWN, self._place_yaw)
+            if not self._run(self._way_in):
                 raise _Abort("seal_lost_transport")
             self._set_down(c, top, slot_c[2])
             self._watch_seal = False
@@ -400,7 +401,7 @@ class Supervisor:
             try:
                 self._run(self._line(p, up, R[:, 2], yaw_of(R), loaded=False))
             except IKError:
-                if p[2] < self._rim() + HOVER_ABOVE_RIM:  # inside the bin: back out along the approach
+                if p[2] < self._rim() + HOVER_ABOVE_RIM:  # low in the bin or over the tray: back out the way it came in
                     self._run(joint_move(self._q(), self._way_in.q[-1], cfg.motion))
                     self._run(reverse(self._way_in))
             self._to_view()
@@ -454,14 +455,15 @@ class Supervisor:
         rec.gripped_part = part = self._held_part
         rec.arm_hit_n = self._arm_hit_n if self._arm_hit_n > ARM_HIT_MIN_N else 0.0
         rec.referee_ok = part is not None and rec.slot is not None and referee_in_slot(scene, part, rec.slot)
-        rec.detected = rec.verify_ok == rec.referee_ok
+        placed = rec.referee_ok and rec.released  # a part that fell into its slot was not placed by the robot
+        rec.detected = rec.verify_ok == placed
         if rec.arm_hit_n:  # spec: a collision during motion is a failed attempt, wherever the part ends up
             rec.outcome, rec.reason = "fail", "collision"
-        elif rec.referee_ok:
+        elif placed:
             rec.outcome, rec.reason = "success", ""
         else:
             rec.outcome = "fail"
-            if not rec.reason or rec.slot is not None:
+            if not rec.reason or (rec.slot is not None and not rec.referee_ok):
                 rec.reason = "misplaced"  # it lies in its slot area, off center
             elif rec.reason == "no_seal" and part is not None:
                 rec.reason = "seal_lost_grip"  # sealed, then broke before the vacuum was confirmed
