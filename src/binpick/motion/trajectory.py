@@ -113,7 +113,10 @@ def cartesian_path(scene: Scene, q0: np.ndarray, points: list, approach_dir: np.
     dist = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(way, axis=0), axis=1))]
     qs, q = [], np.asarray(q0, float)
     for i, p in enumerate(way):
-        r = solve_cup_pose(scene, p, approach_dir, yaw, q0=q, pos_tol=LINE_POS_TOL, rot_tol=LINE_ROT_TOL, flip=i == 0)
+        solve = lambda y: solve_cup_pose(scene, p, approach_dir, y, q0=q, pos_tol=LINE_POS_TOL, rot_tol=LINE_ROT_TOL, flip=False)  # noqa: E731
+        r = solve(yaw)
+        if i == 0 and np.abs(r.q - q).max() > MAX_WAYPOINT_JUMP:
+            r = solve(yaw + np.pi)  # the cup may be turned half a turn from what was asked
         if not r.ok and (r.pos_err > MAX_POS_ERR or r.rot_err > MAX_ROT_ERR):
             raise IKError(f"waypoint {i}/{len(way) - 1} unreachable (pos_err={r.pos_err:.4f})")
         if np.abs(r.q - q).max() > MAX_WAYPOINT_JUMP:  # waypoint 0 is checked against q0 (no step command)

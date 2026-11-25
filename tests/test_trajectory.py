@@ -84,7 +84,7 @@ def test_straight_line_does_not_waste_ik_on_a_flipped_wrist(cfg, monkeypatch):
     monkeypatch.setattr(ik, "_solve", lambda *a: calls.append(1) or real(*a))
     tr = cartesian_line(s, r.q, p, p - [0, 0, 0.15], DOWN, r.yaw, cfg.motion)  # 16 waypoints
     assert np.abs(np.diff(tr.q, axis=0)).max() < 0.1
-    assert len(calls) == 17  # one each, plus the alternative at the first
+    assert len(calls) == 16  # one each
 
 
 @pytest.mark.parametrize("at", [(0.0, 0.0), (0.13, 0.09), (-0.13, -0.09)])

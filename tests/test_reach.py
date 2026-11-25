@@ -1,3 +1,4 @@
+import mujoco
 import numpy as np
 import pytest
 
@@ -135,3 +136,36 @@ def test_wrist_is_not_solved_at_its_limit_when_the_other_turn_is_free(scene):
         r = solve_cup_pose(scene, np.r_[c[:2], c[2] + 0.15], np.array([0, 0, -1.0]), yaw)
         assert r.ok
         assert min((r.q - lim[:, 0]).min(), (lim[:, 1] - r.q).min()) > 0.10, yaw
+
+
+def test_lines_down_to_and_up_from_every_slot(cfg):
+    """A line that starts where the arm already is must never begin with a wrist flip."""
+    from binpick.motion.ik import DOWN, solve_cup_pose
+    from binpick.motion.trajectory import cartesian_line
+    from binpick.sim.scene import build_scene
+
+    s = build_scene(cfg, [])
+    for slot, c in enumerate(s.slot_centers):
+        for yaw in (-2.0, -0.4, 1.2):
+            top = np.r_[c[:2], c[2] + 0.18]
+            r = solve_cup_pose(s, top, DOWN, yaw)
+            assert r.ok, (slot, yaw)
+            down = cartesian_line(s, r.q, top, np.r_[c[:2], c[2] + 0.03], DOWN, r.yaw, cfg.motion)
+            cartesian_line(s, down.q[-1], np.r_[c[:2], c[2] + 0.03], top, DOWN, r.yaw, cfg.motion)
+
+
+@pytest.mark.parametrize("q", [[1.685, 0.211, 0.109, -2.238, -0.036, 2.447, 2.758], [2.068, -0.597, -0.122, -2.928, -0.094, 2.331, 0.401],
+                               [1.333, -0.594, -0.182, -2.931, -0.141, 2.338, 0.133]])
+def test_a_line_up_from_where_the_arm_is_never_starts_with_a_wrist_flip(cfg, q):
+    """Postures from real runs, close to a joint limit."""
+    from binpick.motion.ik import yaw_of
+    from binpick.motion.trajectory import cartesian_line
+    from binpick.sim.scene import build_scene
+
+    s = build_scene(cfg, [])
+    for j, v in zip(s.arm_joint_names, q):
+        s.data.joint(j).qpos[0] = v
+    mujoco.mj_forward(s.model, s.data)
+    st = s.data.site(s.cup_site)
+    p, R = st.xpos.copy(), st.xmat.reshape(3, 3).copy()
+    cartesian_line(s, np.array(q), p, p + [0, 0, 0.1], R[:, 2], yaw_of(R), cfg.motion, loaded=False)
