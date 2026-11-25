@@ -50,21 +50,13 @@ class JointTrajectory:
         return (self.sample(t + h) - 2 * self.sample(t) + self.sample(t - h)) / h**2 if self.duration > 0 else np.zeros(self.q.shape[1])
 
 
-def _optimal(D: float, V: float, A: float) -> float:
-    """Shortest time for distance D under speed V and peak acceleration A."""
-    if D <= 0:
-        return 0.0
-    if D >= V * V / (C * A):
-        return D / V + V / (C * A)
-    return 2 * np.sqrt(D / (C * A))
-
-
 def _time_scale(limits: list[tuple[float, float, float]]) -> tuple[float, float]:
-    """(T, Ta) satisfying every (distance, vmax, amax) with one shared normalized profile."""
-    T = max([SAMPLE_DT] + [_optimal(D, V, A) for D, V, A in limits])
+    """(T, Ta) satisfying every (distance, vmax, amax) with one shared normalized profile: the peak speed is
+    distance / (T - Ta), the peak acceleration distance / (C Ta (T - Ta))."""
     K = max([0.0] + [D / (C * A) for D, _, A in limits])
-    Ta = (T - np.sqrt(max(T * T - 4 * K, 0.0))) / 2
-    return T, float(np.clip(Ta, min(SAMPLE_DT, T / 2), T / 2))
+    S = max([SAMPLE_DT / 2, np.sqrt(K)] + [D / V for D, V, _ in limits])  # T - Ta
+    Ta = max(K / S, SAMPLE_DT / 2)
+    return float(S + Ta), float(Ta)
 
 
 def _accel_shape(u: np.ndarray) -> np.ndarray:
@@ -131,14 +123,16 @@ def cartesian_path(scene: Scene, q0: np.ndarray, points: list, approach_dir: np.
     if dist[-1] <= 0:
         return JointTrajectory(np.array([0.0, T]), np.repeat(qs[:1], 2, axis=0))
     spline = CubicSpline(dist, qs)
-    for _ in range(4):  # near a singularity the joints move unevenly: slow down until the peak is within the limit
+    for _ in range(6):  # near a singularity the joints move unevenly: slow down until the datasheet limits hold (the part's load is limited by the cup's own acceleration)
         n = int(np.ceil(T / SAMPLE_DT)) + 1
         tr = JointTrajectory(np.linspace(0, T, n), spline(_profile(T, Ta, n) * dist[-1]))
-        acc = np.abs(np.diff(tr.q, n=2, axis=0)) / (T / (n - 1)) ** 2
-        over = (acc / np.array(m.max_joint_acc)).max() if n > 2 else 0.0
-        if over <= 1.1:
+        dt = T / (n - 1)
+        fast = (np.abs(np.diff(tr.q, axis=0)) / dt / np.array(m.max_joint_vel)).max()
+        hard = (np.abs(np.diff(tr.q, n=2, axis=0)) / dt**2 / np.array(m.max_joint_acc)).max() if n > 2 else 0.0
+        k = max(fast, np.sqrt(hard))
+        if k <= 1.0:
             break
-        k = np.sqrt(over)
+        k *= 1.005  # a little more, so that the next pass ends it
         T, Ta = T * k, Ta * k
     return tr
 

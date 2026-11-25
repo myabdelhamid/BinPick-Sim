@@ -111,7 +111,7 @@ M4 additions (builder's calls, disclosed):
 - **Depth noise** (both cameras): random error 0.5 mm at 0.65 m growing with distance², 1% of pixels missing, half the pixels next to a jump over 5 mm missing. Between industrial structured light (60–80 µm) and low-cost stereo (up to about 2.6 mm RMS). Errors are independent per pixel, so averaging leaves about 0.2 mm: milder than correlated noise of the same size. No calibration error, no mixed pixels.
 - **Safe picks first** (the order of §8 changes): a pick is safe if nothing taller is seen along the part's outline, the cup is within 3 mm of the surface center and the tilt is at most 5°. Safe comes before flat-before-curved. With no safe pick the bin is shaken (up to 3 times); then risky picks that pass the owner's rules are taken. A run ends with `no_candidate` after 3 shakes in a row without a pick.
 - **Harder shakes** for the second and third in a row (40 mm at 5 Hz commanded, about 24 mm and 2.4 g measured).
-- **Lift:** straight up at 1.5 m/s², 1.5 mm away from a wall the part touches, sideways position held with the joint readings. A part felt to be over 1.2 kg is carried at 2 instead of 3 rad/s².
+- **Lift:** straight up at 1.5 m/s², 1.5 mm away from a wall the part touches, sideways position held with the joint readings. The carrying acceleration follows the felt weight and the estimated seal (1.2 to 6 rad/s²; M6). If straight up is out of reach at the far bin edge, the last 100 mm of the lift lean toward the robot (M6).
 - **Joint torques** are used as a sensor (contact on approach, part weight), noise-free like the encoders.
 - **Collision check:** planned approaches are checked against an empty model of the cell. A hit is a planning rejection, not an attempt, for both planners.
 

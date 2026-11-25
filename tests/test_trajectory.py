@@ -196,3 +196,50 @@ def test_fast_moves_stay_within_the_motors_torque_limits(empty, cfg):
     for p in ((hi[0] - 0.05, lo[1] + 0.05), (lo[0] + 0.05, hi[1] - 0.05), (0.0, 0.5), (-0.24, 0.65)):
         execute(empty, joint_move(_arm_q(empty), solve_cup_down(empty, np.r_[p, 0.35]).q, cfg.motion), watch)
     assert np.all(worst < 0.9 * limit), worst / limit
+
+
+def test_no_joint_move_exceeds_a_joint_limit(empty, cfg):
+    """Every joint, over many view <-> bin / slot moves, loaded and not: speed and acceleration."""
+    m, rng = cfg.motion, np.random.default_rng(2)
+    lo, hi = empty.bin_inner_bounds()
+    view = solve_cup_down(empty, np.array(cfg.layout.view_pos)).q
+    ends = [np.r_[rng.uniform(lo[:2] + 0.04, hi[:2] - 0.04), rng.uniform(0.25, 0.4)] for _ in range(25)]
+    ends += [np.r_[c[:2], rng.uniform(0.12, 0.35)] for c in empty.slot_centers]
+    for p in ends:
+        r = solve_cup_down(empty, p, yaw=rng.uniform(-np.pi, np.pi))
+        if not r.ok:
+            continue
+        for a, b in ((view, r.q), (r.q, view)):
+            for loaded in (False, True):
+                tr = joint_move(a, b, m, loaded=loaded)
+                dt = tr.t[1] - tr.t[0]
+                v, acc = np.diff(tr.q, axis=0) / dt, np.diff(tr.q, n=2, axis=0) / dt**2
+                limit = np.minimum(m.max_joint_acc, m.max_joint_acc_loaded) if loaded else np.array(m.max_joint_acc)
+                assert np.all(np.abs(v).max(axis=0) <= np.array(m.max_joint_vel) * 1.005)
+                assert np.all(np.abs(acc).max(axis=0) <= limit * 1.02)
+
+
+@pytest.mark.parametrize("loaded", [False, True])
+def test_no_line_exceeds_a_datasheet_limit(empty, cfg, loaded):
+    m = cfg.motion
+    lo, hi = empty.bin_inner_bounds()
+    for x in np.linspace(lo[0] + 0.05, hi[0] - 0.05, 4):
+        for y in np.linspace(lo[1] + 0.05, hi[1] - 0.05, 3):
+            p0, p1 = np.array([x, y, 0.06]), np.array([x, y, 0.30])
+            r = solve_cup_down(empty, p0)
+            for a, b, q in ((p0, p1, r.q), (p1, p0, solve_cup_down(empty, p1, q0=r.q).q)):
+                try:
+                    tr = cartesian_line(empty, q, a, b, DOWN, r.yaw, m, loaded=loaded)
+                except IKError:
+                    continue
+                dt = tr.t[1] - tr.t[0]
+                assert np.all(np.abs(np.diff(tr.q, axis=0)).max(axis=0) / dt <= np.array(m.max_joint_vel) * 1.005)
+                assert np.all(np.abs(np.diff(tr.q, n=2, axis=0)).max(axis=0) / dt**2 <= np.array(m.max_joint_acc) * 1.02)
+
+
+def test_a_line_may_start_half_a_turn_away_from_what_was_asked(empty, cfg):
+    p = np.r_[(lambda b: (b[0] + b[1])[:2] / 2)(empty.bin_inner_bounds()), 0.2]
+    q = teleport_cup(empty, p, yaw=0.3)
+    st = empty.data.site(empty.cup_site)
+    yaw = yaw_of(st.xmat.reshape(3, 3))
+    assert cartesian_line(empty, q, st.xpos.copy(), st.xpos + [0, 0, 0.1], DOWN, yaw + np.pi, cfg.motion).duration > 0

@@ -78,7 +78,7 @@ sim:
 motion:
   max_joint_vel: [2.175, 2.175, 2.175, 2.175, 2.61, 2.61, 2.61]  # rad/s, Panda datasheet limits
   max_joint_acc: [15.0, 7.5, 10.0, 12.5, 12.0, 12.0, 12.0]  # rad/s^2, Panda datasheet limits, wrist kept below them (motor torque)
-  max_joint_acc_loaded: 3.0      # rad/s^2, carrying a part (keeps inertial peel/shear on the cup low)
+  max_joint_acc_loaded: 3.0      # rad/s^2, joint moves with a part before its weight is known; lines: whole-line average only
   max_cart_vel: 0.8              # m/s, straight-line cup moves
   max_cart_acc: 2.5              # m/s^2, carrying a part (lines are along the cup axis: 1.75 kg * (g + 2.5) = 22 N, 55% of a perfect 39 N seal)
   max_cart_acc_empty: 4.0        # m/s^2, empty cup
@@ -109,7 +109,7 @@ motion:
 
 timing:                          # sim-time costs of non-motion phases (real cells pay these too)
   capture_s: 0.3
-  plan_s: 0.4                    # measured on the reference Mac, one thread: up to about 0.4 s for a full bin (was an assumed 0.2)
+  plan_s: 0.5                    # measured on the reference Mac, one thread, all perception and motion planning: mean 0.41, at most 0.6 s
   vacuum_build_s: 0.15
   release_s: 0.25
   verify_s: 0.2

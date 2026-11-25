@@ -184,21 +184,63 @@ def test_heaviest_cylinder_gripped_on_its_side_is_not_dropped(cfg, slot):
     assert sup.attempt(t).outcome == "success"
 
 
-def test_part_and_cup_clear_the_rim_and_the_tray_parts_on_the_way(cfg):
-    """Highest allowed part: whatever hangs under the cup must clear the rim near the bin and 110 mm parts in the tray."""
-    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.06, 0.06, 0.069), 0.3))
+def carry(cfg, slot, monkeypatch=None, depth=None):
+    """Bottom height of a carried 60 mm box over the transport phase, with whether it was near the bin."""
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.06, 0.06, 0.06), 0.25), xy_offset=(-0.10, 0.08))
     for _ in range(100):
         mujoco.mj_step(s.model, s.data)
-    low = []
-    b = s.part_body_ids[0]
-    lo, hi = s.bin_inner_bounds()
+    b, (lo, hi), out = s.part_body_ids[0], s.bin_inner_bounds(), []
 
     def watch(sc, ph):
         if ph == "transport":
-            p, z = sc.data.xpos[b][:2], sc.data.xpos[b][2] - 0.0345
-            near_bin = np.all(p > lo[:2] - 0.09) and np.all(p < hi[:2] + 0.09)
-            low.append((near_bin, z))
+            p = sc.data.xpos[b]
+            near = np.all(p[:2] > lo[:2] - 0.05) and np.all(p[:2] < hi[:2] + 0.05)
+            out.append((near, p[2] - 0.03))
 
-    Supervisor(s, np.random.default_rng(0), seed=0, observer=watch).attempt(oracle_targets(s)[0])
-    assert min(z for n, z in low if n) > hi[2] + 0.02
-    assert min(z for _, z in low) > s.slot_centers[0][2] + 0.115
+    sup = Supervisor(s, np.random.default_rng(0), seed=0, observer=watch)
+    for k in range(slot):
+        sup.slots.mark_used(k)
+    t = oracle_targets(s)[0]
+    rec = sup.attempt(t if depth is None else dataclasses.replace(t, depth=depth))
+    return rec, out, s
+
+
+@pytest.mark.parametrize("slot", [4, 9])
+def test_carried_part_stays_above_the_rim_until_it_is_past_the_bin(cfg, slot):
+    rec, out, s = carry(cfg, slot)
+    assert rec.outcome == "success"
+    assert min(z for near, z in out if near) > s.bin_inner_bounds()[1][2] + 0.005
+
+
+def test_low_transport_is_not_used_if_it_would_cut_the_rim(cfg, monkeypatch):
+    """With every height refused the arm must not carry the part at all."""
+    from binpick.motion.collision import CellCheck
+
+    monkeypatch.setattr(CellCheck, "clears_rim", lambda *a: False)
+    rec, _, _ = carry(cfg, 4)
+    assert rec.outcome == "fail" and rec.reason == "ik_fail"
+
+
+@pytest.mark.parametrize("slot", [10, 15])
+def test_carried_part_passes_over_the_tallest_part_that_can_stand_in_the_tray(cfg, slot):
+    rec, out, s = carry(cfg, slot)
+    assert rec.outcome == "success"
+    assert min(z for _, z in out) > s.slot_centers[0][2] + 0.110 + 0.010
+
+
+def test_transport_really_is_lower_than_the_rim_when_it_can_be(cfg):
+    rec, out, s = carry(cfg, 15)
+    assert out[-1][1] < s.bin_inner_bounds()[1][2]
+
+
+def test_retreat_rises_above_the_tallest_part_before_going_sideways(cfg):
+    s = single_part_scene(cfg, PartSpec(0, "box", "plastic", (0.08, 0.08, 0.02), 0.15))
+    for _ in range(100):
+        mujoco.mj_step(s.model, s.data)
+    tips = []
+    sup = Supervisor(s, np.random.default_rng(0), seed=0,
+                     observer=lambda sc, ph: tips.append(sc.data.site(sc.cup_site).xpos.copy()) if ph == "retreat" else None)
+    sup.attempt(oracle_targets(s)[0])
+    tips = np.array(tips)
+    low = tips[tips[:, 2] < s.slot_centers[0][2] + 0.110]
+    assert np.linalg.norm(low[:, :2] - tips[0, :2], axis=1).max() < 0.004

@@ -304,7 +304,7 @@ class Supervisor:
         self._place_yaw = place_yaw(long_cup)
         top = slot_c[2] + target.depth + cfg.motion.place_clearance  # cup height that surely clears the tray
         # lowest carrying height at the slot: over the tallest part that can stand in the tray
-        low_z = max(top, slot_c[2] + longest_part(cfg) + target.depth + cfg.motion.clear_tray)
+        low_z = slot_c[2] + longest_part(cfg) + target.depth + cfg.motion.clear_tray
         chosen: dict = {}
 
         def transport():
@@ -318,11 +318,11 @@ class Supervisor:
                 if not r.ok:
                     continue
                 move = joint_move(self._q(), r.q, m, loaded=True)
-                chosen.update(move=move, cup=at(r.yaw), z=z, yaw=r.yaw, m=m)
                 if self.cell.clears_rim(move, target.depth + cfg.motion.clear_tray, longest_part(cfg)):
+                    chosen.update(move=move, cup=at(r.yaw), z=z, yaw=r.yaw, m=m)
                     break
             if not chosen:
-                raise IKError("pre-place unreachable")
+                raise IKError("no safe way to the slot")
             self._place_yaw = chosen["yaw"]
             if not self._run(chosen["move"]):
                 raise _Abort("seal_lost_transport")

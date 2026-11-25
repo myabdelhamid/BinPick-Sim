@@ -9,8 +9,8 @@ import numpy as np
 
 from binpick.sim.scene import Scene
 
-# Elbow-up seed; joint1 is aimed at the target before solving.
 LIMIT_MARGIN = 0.15  # rad; a joint closer to its limit than this may not be able to follow the next line
+# Elbow-up seed; joint1 is aimed at the target before solving.
 READY_Q = np.array([0.0, -0.2, 0.0, -2.0, 0.0, 1.8, 0.7854])
 
 
