@@ -1,0 +1,22 @@
+1001 placed 20/20 attempts 21 shakes 4 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1}
+1003 placed 20/20 attempts 22 shakes 6 stop empty left 0 lost 0 misplaced 0 {'collision': 2}
+1005 placed 20/20 attempts 22 shakes 8 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1, 'seal_lost_grip': 1}
+1002 placed 20/20 attempts 21 shakes 8 stop empty left 0 lost 0 misplaced 0 {'collision': 1}
+1004 placed 19/20 attempts 22 shakes 6 stop empty left 0 lost 1 misplaced 0 {'seal_lost_lift': 1, 'ik_fail': 1, 'seal_lost_transport': 1}
+1000 placed 19/20 attempts 24 shakes 21 stop no_candidate left 1 lost 0 misplaced 0 {'seal_lost_lift': 1, 'no_seal': 4}
+1006 placed 20/20 attempts 20 shakes 6 stop empty left 0 lost 0 misplaced 0 {}
+1007 placed 20/20 attempts 20 shakes 9 stop empty left 0 lost 0 misplaced 0 {}
+1008 placed 20/20 attempts 21 shakes 7 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1}
+1009 placed 20/20 attempts 20 shakes 6 stop empty left 0 lost 0 misplaced 0 {}
+1011 placed 20/20 attempts 20 shakes 7 stop empty left 0 lost 0 misplaced 0 {}
+1010 placed 20/20 attempts 25 shakes 5 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 3, 'ik_fail': 1, 'collision': 1}
+1012 placed 20/20 attempts 21 shakes 9 stop empty left 0 lost 0 misplaced 0 {'collision': 1}
+1014 placed 20/20 attempts 20 shakes 13 stop empty left 0 lost 0 misplaced 0 {}
+1013 placed 20/20 attempts 23 shakes 11 stop empty left 0 lost 0 misplaced 0 {'collision': 3}
+1016 placed 20/20 attempts 21 shakes 7 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1}
+1015 placed 20/20 attempts 22 shakes 9 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 2}
+1017 placed 20/20 attempts 25 shakes 6 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 2, 'collision': 3}
+1018 placed 20/20 attempts 20 shakes 9 stop empty left 0 lost 0 misplaced 0 {}
+1019 placed 19/20 attempts 19 shakes 10 stop no_candidate left 1 lost 0 misplaced 0 {}
+rules: success 397/429 = 92.5%  emptied 17/20  placed 397/400  errors []  failures {'seal_lost_lift': 13, 'collision': 11, 'seal_lost_grip': 1, 'ik_fail': 2, 'seal_lost_transport': 1, 'no_seal': 4}
+cycle: successful picks mean 8.09 s max 11.33 s, over 8 s 203/397; all attempts mean 7.77 s; sim time per placed part incl. shakes 9.9 s

@@ -1,0 +1,22 @@
+1202 placed 20/20 attempts 20 shakes 4 stop empty left 0 lost 0 misplaced 0 {}
+1204 placed 19/20 attempts 19 shakes 8 stop no_candidate left 1 lost 0 misplaced 0 {}
+1200 placed 20/20 attempts 21 shakes 4 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1}
+1201 placed 20/20 attempts 21 shakes 5 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1}
+1203 placed 20/20 attempts 23 shakes 4 stop empty left 0 lost 0 misplaced 0 {'no_seal': 3}
+1205 placed 20/20 attempts 23 shakes 11 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 2, 'no_seal': 1}
+1206 placed 20/20 attempts 21 shakes 8 stop empty left 0 lost 0 misplaced 0 {'no_seal': 1}
+1207 placed 20/20 attempts 21 shakes 4 stop empty left 0 lost 0 misplaced 0 {'collision': 1}
+1208 placed 20/20 attempts 23 shakes 5 stop empty left 0 lost 0 misplaced 0 {'ik_fail': 2, 'seal_lost_lift': 1}
+1210 placed 20/20 attempts 24 shakes 6 stop empty left 0 lost 0 misplaced 0 {'collision': 1, 'no_seal': 3}
+1209 placed 20/20 attempts 23 shakes 11 stop empty left 0 lost 0 misplaced 0 {'collision': 2, 'no_seal': 1}
+1211 placed 19/20 attempts 21 shakes 14 stop no_candidate left 1 lost 0 misplaced 0 {'no_seal': 2}
+1212 placed 20/20 attempts 23 shakes 7 stop empty left 0 lost 0 misplaced 0 {'no_seal': 2, 'seal_lost_lift': 1}
+1214 placed 20/20 attempts 20 shakes 4 stop empty left 0 lost 0 misplaced 0 {}
+1213 placed 20/20 attempts 22 shakes 6 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1, 'no_seal': 1}
+1216 placed 20/20 attempts 20 shakes 6 stop empty left 0 lost 0 misplaced 0 {}
+1215 placed 20/20 attempts 22 shakes 8 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1, 'collision': 1}
+1217 placed 20/20 attempts 20 shakes 5 stop empty left 0 lost 0 misplaced 0 {}
+1218 placed 20/20 attempts 23 shakes 8 stop empty left 0 lost 0 misplaced 0 {'no_seal': 3}
+1219 placed 20/20 attempts 20 shakes 3 stop empty left 0 lost 0 misplaced 0 {}
+rules: success 398/430 = 92.6%  emptied 18/20  placed 398/400  errors []  failures {'seal_lost_lift': 8, 'no_seal': 17, 'collision': 5, 'ik_fail': 2}
+cycle: successful picks mean 8.07 s max 9.96 s, over 8 s 187/398; all attempts mean 7.75 s; sim time per placed part incl. shakes 9.5 s

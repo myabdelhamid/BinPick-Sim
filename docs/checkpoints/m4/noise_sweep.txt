@@ -1,0 +1,9 @@
+== n0 (n0: no noise, n1: 1 mm, n2: 2 mm), seeds 1000-1009
+rules: success 200/205 = 97.6%  emptied 10/10  placed 200/200  errors []  failures {'seal_lost_lift': 2, 'collision': 3}
+cycle: successful picks mean 8.09 s max 10.53 s, over 8 s 92/200; all attempts mean 7.99 s; sim time per placed part incl. shakes 9.8 s
+== n1 (n0: no noise, n1: 1 mm, n2: 2 mm), seeds 1000-1009
+rules: success 198/205 = 96.6%  emptied 9/10  placed 198/200  errors []  failures {'collision': 3, 'seal_lost_lift': 4}
+cycle: successful picks mean 8.11 s max 9.63 s, over 8 s 104/198; all attempts mean 7.96 s; sim time per placed part incl. shakes 9.6 s
+== n2 (n0: no noise, n1: 1 mm, n2: 2 mm), seeds 1000-1009
+rules: success 200/205 = 97.6%  emptied 10/10  placed 200/200  errors []  failures {'collision': 4, 'no_seal': 1}
+cycle: successful picks mean 8.11 s max 9.82 s, over 8 s 105/200; all attempts mean 8.00 s; sim time per placed part incl. shakes 9.7 s

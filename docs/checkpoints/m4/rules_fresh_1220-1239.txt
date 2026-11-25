@@ -1,0 +1,26 @@
+1224 placed 20/20 attempts 20 shakes 6 stop empty left 0 lost 0 misplaced 0 {}
+1225 placed 20/20 attempts 20 shakes 5 stop empty left 0 lost 0 misplaced 0 {}
+1220 placed 20/20 attempts 22 shakes 6 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 2}
+1223 placed 20/20 attempts 21 shakes 7 stop empty left 0 lost 0 misplaced 0 {'collision': 1}
+1222 placed 20/20 attempts 21 shakes 6 stop empty left 0 lost 0 misplaced 0 {'ik_fail': 1}
+1221 placed 20/20 attempts 21 shakes 8 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1}
+1228 placed 20/20 attempts 20 shakes 4 stop empty left 0 lost 0 misplaced 0 {}
+1227 placed 19/20 attempts 20 shakes 10 stop no_candidate left 1 lost 0 misplaced 0 {'collision': 1}
+1226 placed 19/20 attempts 20 shakes 12 stop no_candidate left 1 lost 0 misplaced 0 {'collision': 1}
+1230 placed 20/20 attempts 20 shakes 12 stop empty left 0 lost 0 misplaced 0 {}
+1229 placed 19/20 attempts 20 shakes 10 stop no_candidate left 1 lost 0 misplaced 0 {'no_seal': 1}
+1232 ERROR RuntimeError('exit code 1: esktop-M-Projects-BinPick-Sim/7eede640-8f9a-4dfd-ae49-a152c674a124/scratchpad/t_final2/src/binpick/sim/settle.py", line 127, in validate_settled\n    raise SettleError(part.id, "still moving after the final settle pass")\nbinpick.sim.settle.SettleError: part 6: still moving after the final settle pass')
+1231 placed 20/20 attempts 20 shakes 9 stop empty left 0 lost 0 misplaced 0 {}
+1233 placed 20/20 attempts 20 shakes 9 stop empty left 0 lost 0 misplaced 0 {}
+1234 placed 20/20 attempts 20 shakes 6 stop empty left 0 lost 0 misplaced 0 {}
+1238 placed 20/20 attempts 20 shakes 7 stop empty left 0 lost 0 misplaced 0 {}
+1235 placed 20/20 attempts 20 shakes 8 stop empty left 0 lost 0 misplaced 0 {}
+1237 placed 20/20 attempts 21 shakes 10 stop empty left 0 lost 0 misplaced 0 {'seal_lost_lift': 1}
+1236 placed 20/20 attempts 22 shakes 12 stop empty left 0 lost 0 misplaced 0 {'collision': 1, 'seal_lost_lift': 1}
+1239 placed 20/20 attempts 20 shakes 9 stop empty left 0 lost 0 misplaced 0 {}
+rules: success 377/388 = 97.2%  emptied 16/20  placed 377/400  errors [1232]  failures {'seal_lost_lift': 5, 'collision': 4, 'ik_fail': 1, 'no_seal': 1}
+cycle: successful picks mean 8.09 s max 9.70 s, over 8 s 205/377; all attempts mean 7.97 s; sim time per placed part incl. shakes 9.7 s
+--- 1232 rerun after the settle fix (code otherwise identical):
+1232 placed 19/20 attempts 19 shakes 16 stop no_candidate left 1 lost 0 misplaced 0 {}
+rules: success 19/19 = 100.0%  emptied 0/1  placed 19/20  errors []  failures {}
+cycle: successful picks mean 8.13 s max 9.68 s, over 8 s 9/19; all attempts mean 8.13 s; sim time per placed part incl. shakes 11.1 s
