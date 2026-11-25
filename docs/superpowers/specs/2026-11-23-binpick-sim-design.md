@@ -37,7 +37,7 @@ Anti-goals (fail even if it "works"):
 
 - **Attempt (owner-decided):** an attempt starts when the arm begins approaching a chosen suction point. Each retry is a new attempt. "No candidate" results, shakes and planning-time rejections (for example IK infeasible before any motion) are logged as events but are **not** attempts. Collisions, seal losses and misplacements during motion are failed attempts. The same rule applies to both planners.
 - **Success rate** = successful picks ÷ all attempts.
-- **Successful pick** = the part's final resting position is inside its assigned slot, within ±10 mm of the slot center in x and y, after release and settling. This is scored by the benchmark referee from sim ground truth.
+- **Successful pick** = the robot set the part down and let go of it, and the part's final resting position is inside its assigned slot, within ±10 mm of the slot center in x and y, after release and settling. This is scored by the benchmark referee from sim ground truth.
 - **Lost and misplaced parts (owner-decided, strict):**
   - A part dropped back into the bin stays there and can be picked again.
   - A part that ends up outside the bin and not in a slot (floor, tray rim) is a failed attempt. It is removed from the scene and recorded as *lost*.

@@ -34,3 +34,8 @@
 `uv run binpick-bench` (defaults: seeds 1–25, both planners). Two-seed smoke test (seeds 1000–1001, 2 attempts each) in pytest, so also in CI.
 
 ### Task 5: Fresh review on dev seeds, fix pass, then the official run and the checkpoint.
+
+## Outcome (2026-11-25)
+Official run on commit 242ed2e: rules 497/521 = 95.4%, 22/25 bins emptied, 497/500 placed, mean cycle 8.09 s; random 36/1000 = 3.6%. Evidence in docs/checkpoints/m5.
+Before the run, the review changed scoring: an attempt is a success only if the robot released the part itself (a part that fell into its slot counts as placed, not as a success). One robot bug was fixed: recovery over the tray now backs out the way it came.
+Not done (minor, from the review): blank `safe`/`crowd` columns for random, logging "no candidate" looks as events, stopping bins left over after a killed run, a guard on `binpick-run`/`binpick-scene` for seeds 1–25.

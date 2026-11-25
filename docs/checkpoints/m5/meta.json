@@ -1,0 +1,51 @@
+{
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25
+  ],
+  "planners": [
+    "rules",
+    "random"
+  ],
+  "commit": "242ed2e71cd1cc734e31610a1cc58c5a95502010",
+  "dirty": false,
+  "max_attempts": null,
+  "config_sha256": "0176a75dfafd35fb1a026dfdde21763235dec7a07250f3ce4f428ef8ae15ba3c",
+  "default_config": true,
+  "workers": 6,
+  "command": "uv run binpick-bench",
+  "started": "2026-11-25T03:25:34+01:00",
+  "wall_s": 1758.0,
+  "platform": "macOS-26.5.1-arm64-arm-64bit (arm64)",
+  "versions": {
+    "python": "3.12.15",
+    "mujoco": "4.0.1",
+    "mink": "1.4.0",
+    "numpy": "2.5.5",
+    "scipy": "1.18.1",
+    "open3d": "0.20.0"
+  }
+}

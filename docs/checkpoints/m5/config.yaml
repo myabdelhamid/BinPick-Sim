@@ -1,0 +1,179 @@
+# BinPick-Sim settings. SI units throughout (m, kg, s).
+seed: 1000                      # dev seed; benchmark seeds 1-25 are reserved for benchmark runs
+
+parts:
+  n_boxes: 15
+  n_cylinders: 5
+  box_footprint: [0.045, 0.110]  # each footprint side
+  box_height: [0.020, 0.070]
+  cyl_diameter: [0.040, 0.080]
+  cyl_length: [0.040, 0.110]
+  mass_min: 0.05
+  mass_max: 1.75                 # owner 2026-11-24: heaviest part the 39 N cup carries at current speeds with margin
+  materials:
+    plastic:   {prob: 0.6, density: 1200, friction: 0.6, rgba: [0.20, 0.45, 0.85, 1.0]}
+    aluminium: {prob: 0.3, density: 2700, friction: 0.5, rgba: [0.75, 0.76, 0.78, 1.0]}
+    steel:     {prob: 0.1, density: 7850, friction: 0.5, rgba: [0.35, 0.35, 0.38, 1.0]}
+
+cup:
+  diameter: 0.044
+  length: 0.020
+  rated_hold_kg: 3.0
+  tool_length: 0.200             # flange to cup base; 200 mm extension so links 5-7 clear the 200 mm deep bin walls
+
+bin:
+  inner: [0.400, 0.300, 0.200]
+  wall: 0.010
+
+tray:
+  rows: 4
+  cols: 5
+  slot: 0.120
+  wall_height: 0.008             # low slot dividers
+
+cameras:
+  width: 640
+  height: 480
+  bin_fovy: 36.0                 # bin rim fills ~90% of the frame width
+  bin_height_above_rim: 0.55
+  tray_fovy: 42.0                # whole tray plus parts overhanging edge slots stay in frame
+  tray_height: 0.90              # above tray surface
+  # depth noise (both cameras). Between an industrial structured-light camera (about 0.1 mm) and a low-cost
+  # stereo camera (about 2 mm) at this distance
+  depth_sigma: 0.0005            # m, random error per pixel at sigma_distance, growing with distance squared
+  sigma_distance: 0.65
+  dropout: 0.01                  # share of pixels with no reading
+  edge_jump: 0.005               # pixels next to a depth jump larger than this ...
+  edge_dropout: 0.5              # ... lose their reading this often
+
+shaker:
+  amplitude: 0.025               # commanded; the bin really moves about 17 mm (1.1 g): flattens the pile
+  freq_hz: 4.0
+  hard_amplitude: 0.040          # second and third shake in a row (the bin really moves about 24 mm at 5 Hz: 2.4 g)
+  hard_freq_hz: 5.0
+  duration_s: 2.0
+  settle_s: 1.0                  # wait after a shake before looking again
+
+settle:
+  lin_tol: 0.001
+  ang_tol: 0.01
+  drop_timeout_s: 3.0
+  max_redrops: 5
+  drop_height_above_rim: 0.05
+  inset: 0.06
+
+layout:
+  robot_base_pos: [0.0, 0.0, 0.0]
+  bin_center_xy: [0.55, 0.0]
+  tray_center_xy: [0.0, 0.47]      # far row reachable at transport height, near row clear of the base (0.46-0.48)
+  view_pos: [0.39, 0.22, 0.45]   # cup here (pointing down): arm in neither camera's view
+  table_height: 0.0              # bin outer bottom / tray base z
+
+sim:
+  timestep: 0.002
+  noslip_iterations: 5         # removes perpetual contact jitter of wedged parts (cylinders)
+  part_solref_timeconst: 0.01  # stiffer part contacts: ~1 mm penetration under a 20-part pile
+  part_condim: 6               # torsional + rolling friction so wedged cylinders stop rocking
+
+motion:
+  max_joint_vel: [2.175, 2.175, 2.175, 2.175, 2.61, 2.61, 2.61]  # rad/s, Panda datasheet limits
+  max_joint_acc: 8.0             # rad/s^2, empty cup
+  max_joint_acc_loaded: 3.0      # rad/s^2, carrying a part (keeps inertial peel/shear on the cup low)
+  max_cart_vel: 0.8              # m/s, straight-line cup moves
+  max_cart_acc: 2.5              # m/s^2, carrying a part (lines are along the cup axis: 1.75 kg * (g + 2.5) = 22 N, 55% of a perfect 39 N seal)
+  max_cart_acc_empty: 4.0        # m/s^2, empty cup
+  cart_step: 0.01                # IK waypoint spacing on straight lines
+  pregrasp_dist: 0.12            # stand-off along the face normal before approach
+  approach_overtravel: 0.002     # go this far past the surface (cup margin absorbs it)
+  lift_dist: 0.06                # lift at least this far
+  lift_acc: 1.5                  # m/s^2, lifting out of the pile
+  lift_away: 0.0015              # m, sideways shift away from a wall the part touches ...
+  lift_away_rise: 0.006          # ... over the first 6 mm of the lift
+  lift_sideways_gain: 3.0        # sideways stiffness added from the joint readings while lifting
+  heavy_kg: 1.2                  # a part felt to be heavier than this ...
+  max_joint_acc_heavy: 2.0       # ... is carried at this acceleration
+  clear_above_rim: 0.05          # transport height margin above rim + part height
+  place_clearance: 0.014         # start feeling for the tray this far above where the part could touch (the first 0.12 s of the probe is blind)
+  retreat_dist: 0.10
+  touch_start: 0.012             # slow down this far before the surface and feel for contact
+  touch_past: 0.006              # give up this far past where the surface should be
+  guard_force_n: 25.0            # force on the cup that the measured motion does not explain and that stops an approach
+  touch_speed: 0.05              # m/s
+  probe_speed: 0.08              # m/s, feeling for the tray (part height is not visible from above)
+  probe_lag: 0.00015             # m, extra tip lag that means contact (free-motion lag is steady within 0.02 mm)
+  probe_past: 0.004              # stop this far below where the thinnest part would touch
+  settle_after_move_s: 0.03      # hold at the end of each move (velocity feed-forward keeps lag small)
+
+timing:                          # sim-time costs of non-motion phases (real cells pay these too)
+  capture_s: 0.3
+  plan_s: 0.2
+  vacuum_build_s: 0.15
+  release_s: 0.25
+  verify_s: 0.2
+
+suction:
+  lip_points: 16
+  gap_ok: 0.006                  # tilt across the lip that still seals fully (M2 value; no datasheet tilt data)
+  gap_max: 0.012                 # tilt across the lip at which the seal is lost (~16 deg)
+  travel: 0.0135                 # Piab B40 vertical movement: largest lip height spread
+  curve_radius_min: 0.020        # Piab B40 minimum curve radius (40 mm cylinder)
+  curve_limit_q: 0.75            # ASSUMPTION: seal left at that radius (sheet only says it still works there)
+  contact_dist: 0.006            # lip must be within this of the surface
+  margin: 0.0005                 # cup contact margin
+  pull_force_n: 39.0             # Piab B40 pull at 60 kPa (8.77 lb at 17.72 -inHg); must match vacuum_kpa
+  peel_lever_ratio: 0.5          # moment capacity = F_avail * lip_radius * ratio (edge lifts before full lever)
+  shear_friction: 0.5            # sideways/pull force; B40 sheet gives 0.67 (26.3 N), kept lower
+  bellows_timeconst: 0.006       # grip weld solref time constant; gravity sag ~ g*tc^2 = 0.35 mm
+  break_filter_s: 0.02           # seal fails on load sustained ~20 ms (air must leak in), not on 2 ms spikes
+  vacuum_kpa: 60.0
+  sealed_threshold_kpa: 40.0     # grip confirmed below -40 kPa
+  lost_threshold_kpa: 20.0       # hysteresis: grip lost only above -20 kPa ...
+  lost_debounce_polls: 3         # ... on 3 consecutive 20 ms readings (one noisy sample is not a drop)
+  sensor_noise_kpa: 1.0
+
+perception:
+  smooth_sigmas: 4.0             # average a depth reading with neighbours within 4 x the camera's known error of it ...
+  smooth_tol_min: 0.001
+  smooth_reach: 2                # ... up to 2 pixels away
+  cell: 0.001                    # height-map cell (camera pixels are 0.75-1.05 mm apart)
+  min_part_height: 0.008         # above the bin floor = part (thinnest part is 20 mm)
+  wall_margin: 0.003             # ignore cells this close to the walls
+  max_slope: 3.0                 # height change per length that counts as a jump (72 deg, as the seal model)
+  crease_deg: 40.0               # surface direction change over 4 mm that separates two faces
+  groove_width: 0.004            # gaps up to this wide between two parts ...
+  groove_depth: 0.003            # ... seen at least this deep separate them
+  min_surface_mm2: 150.0         # smaller patches are ignored
+  empty_mm2: 200.0               # less visible part area than this = empty bin (smallest face: 900 mm2)
+
+planner:
+  candidate_step: 0.004          # candidate grid on visible surfaces
+  edge_margin: 0.0               # extra room demanded around the cup lip (face edges are located from whole rows of cells)
+  max_tilt_deg: 20.0             # owner rule
+  wall_clearance: 0.004          # cup edge to wall
+  obstacle_height: 0.004         # taller than this above the cup plane ...
+  obstacle_clearance: 0.003      # ... within this of the cup edge blocks the point
+  flat_drop: 0.0015              # lip drop below this counts as flat (flat before curved)
+  per_surface: 3                 # candidates kept per surface (fallbacks if the arm cannot reach one)
+  w_height: 1.0                  # score weights
+  w_seal: 0.5
+  w_wall: 0.2
+  w_center: 0.5                  # penalty per cup radius away from the surface center
+  w_crowd: 1.0                   # penalty for the share of the outline with something taller next to it (pinned?)
+  oversize_margin: 0.006         # a surface longer than the longest part plus this is two parts
+  w_beside: 0.5                  # penalty for the share of the surroundings with something right beside the part
+  beside_band: [0.006, 0.010]    # "beside" = this far beyond the surface's seen edge (4 mm inside the real one)
+  crowd_reach: 0.010             # how far around the surface to look for that
+  wall_touch: [0.006, 0.008]     # a flat surface seen this close to a wall touches it ... surely not (its seen edge is 4 mm inside)
+  flank_unseen: 0.0035           # a curved side reaches this much further
+  unseen_reach: 0.015            # an unseen strip up to this wide counts as whatever is seen beyond it
+  safe_crowd: 0.01               # a pick is safe with at most this share of the outline crowded, ...
+  safe_room: 0.00075             # ... the face reaching this far beyond the lip all round, ...
+  safe_offset: 0.003             # ... the cup this close to the surface center ...
+  safe_tilt_deg: 5.0             # ... and the surface this level; risky picks wait until shaking brings no safe one
+  wall_saturation: 0.08          # wall distance beyond this gives no extra score
+
+run:
+  max_attempts: 40
+  max_shakes: 3                  # in a row with nothing to pick
+  avoid_radius: 0.025            # rules planner: skip points this close to a failed one until the pile changes
+  changed_radius: 0.10           # a successful pick makes failed points this close worth another try
