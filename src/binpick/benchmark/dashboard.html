@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --rules: #2a78d6; --random: #eb6834;
+  --good: #0ca30c; --good-text: #006300; --serious: #ec835a; --critical: #d03b3b; --critical-text: #b42f2f;
+  --wash: rgba(42,120,214,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --rules: #3987e5; --random: #d95926; --good-text: #0ca30c; --critical-text: #e66767;
+    --wash: rgba(57,135,229,0.14);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  --rules: #3987e5; --random: #d95926; --good-text: #0ca30c; --critical-text: #e66767;
+  --wash: rgba(57,135,229,0.14);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 28px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 4px; font-weight: 600; }
+h2 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
+.sub { color: var(--ink-2); margin: 0 0 20px; max-width: 760px; }
+.caption { color: var(--ink-2); font-size: 13px; margin: 0 0 12px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 18px 18px 14px; min-width: 0; }
+.grid { display: grid; gap: 14px; }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 820px) { .g2, .g4 { grid-template-columns: minmax(0, 1fr); } }
+section { margin-top: 26px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 28px 0 6px; }
+.filters .lab { color: var(--ink-2); margin-right: 4px; }
+.seg { display: inline-flex; border: 1px solid var(--ring); border-radius: 9px; overflow: hidden; background: var(--surface); flex-wrap: wrap; }
+.seg button { font: inherit; color: var(--ink); background: none; border: 0; padding: 7px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--ring); }
+.seg button:hover { background: var(--wash); }
+.seg button[aria-pressed="true"] { background: var(--wash); font-weight: 600; }
+.runnote { color: var(--ink-2); font-size: 13px; margin: 0 0 14px; }
+.hero { display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: flex-end; }
+.hero .v { font-size: 52px; font-weight: 600; line-height: 1; }
+.tile .k { color: var(--ink-2); font-size: 13px; }
+.tile .v { font-size: 28px; font-weight: 600; margin: 4px 0 2px; }
+.tile .d { color: var(--ink-2); font-size: 13px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; }
+.chip svg { width: 14px; height: 14px; }
+.chip.met { color: var(--good-text); }
+.chip.missed { color: var(--critical-text); }
+svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg .ink { fill: var(--ink-2); stroke: var(--surface); stroke-width: 3px; paint-order: stroke; stroke-linejoin: round; }
+.legend { display: flex; gap: 16px; color: var(--ink-2); font-size: 13px; margin: 0 0 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+details { margin-top: 8px; color: var(--ink-2); font-size: 13px; }
+summary { cursor: pointer; }
+table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+th { color: var(--ink-2); font-weight: 600; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scroll { overflow-x: auto; }
+.cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.cell { border-radius: 8px; padding: 7px 6px; text-align: center; border: 1px solid var(--ring); outline: none; }
+.cell .s { color: var(--ink-2); font-size: 11px; }
+.cell .p { font-size: 15px; font-weight: 600; }
+.cell.ok { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
+.cell.no { background: color-mix(in srgb, var(--serious) 22%, var(--surface)); }
+.cell:hover, .cell:focus { border-color: var(--ink-2); }
+#tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--ring);
+  border-radius: 8px; padding: 7px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); display: none; z-index: 10; max-width: 260px; }
+#tip b { font-size: 14px; }
+.foot { color: var(--ink-2); font-size: 13px; margin-top: 30px; }
+code { font-size: 12.5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>BinPick-Sim results</h1>
+  <p class="sub">A simulated Franka Panda with a 44 mm suction cup empties bins of 20 mixed parts into a 5 × 4 tray. Each benchmark run uses 25 bins (500 parts) per planner: the rules planner and a random baseline, on the same bins. Success means the robot set the part down, let go, and it rests within ±10 mm of its slot's center.</p>
+
+  <section>
+    <h2>All runs, rules planner</h2>
+    <p class="caption">Dots are the measured rates; whiskers are approximate 95% ranges (success: resampling bins; bins emptied: Wilson). Blind runs used seeds nobody had looked at.</p>
+    <div class="grid g2">
+      <figure class="card" style="margin:0"><h2>Success per attempt</h2><div id="cmpSuccess"></div><details><summary>Table</summary><div class="scroll" id="cmpSuccessT"></div></details></figure>
+      <figure class="card" style="margin:0"><h2>Bins emptied</h2><div id="cmpEmpty"></div><details><summary>Table</summary><div class="scroll" id="cmpEmptyT"></div></details></figure>
+    </div>
+  </section>
+
+  <div class="filters" role="group" aria-label="Run">
+    <span class="lab">Run</span><div class="seg" id="runs"></div>
+  </div>
+  <p class="runnote" id="runnote"></p>
+
+  <section style="margin-top:6px">
+    <div class="card">
+      <div class="hero">
+        <div><div class="tile"><span class="k">Success per attempt, rules planner</span></div><div class="v" id="hero"></div></div>
+        <div class="tile" id="heroSide"></div>
+      </div>
+    </div>
+    <div class="grid g4" style="margin-top:14px" id="tiles"></div>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>Every bin, rules planner</h2>
+      <p class="caption">Parts placed out of 20. <span class="chip met">✓</span> green: emptied. <span class="chip missed">✕</span> orange: a part was left.</p>
+      <div class="cells" id="cells"></div>
+      <details><summary>Table</summary><div class="scroll" id="cellsT"></div></details>
+    </div>
+  </section>
+
+  <section class="grid g2">
+    <figure class="card" style="margin:0">
+      <h2>Cycle time of successful picks, rules planner</h2>
+      <p class="caption">Photo to end of tray check, nothing overlapping. Target 8 s.</p>
+      <div id="hist"></div>
+      <details><summary>Table</summary><div class="scroll" id="histT"></div></details>
+    </figure>
+    <figure class="card" style="margin:0">
+      <h2>Failed attempts by cause</h2>
+      <p class="caption">Each planner on its own scale: random fails about 30 times as often.</p>
+      <div class="legend"><span><i style="background:var(--rules)"></i>Rules</span><span><i style="background:var(--random)"></i>Random</span></div>
+      <div id="fails"></div>
+      <details><summary>Table</summary><div class="scroll" id="failsT"></div></details>
+    </figure>
+  </section>
+
+  <section class="grid g2">
+    <div class="card"><h2>Both planners</h2><div class="scroll" id="side"></div></div>
+    <div class="card"><h2>Parts the rules planner did not place</h2><div class="scroll" id="left"></div></div>
+  </section>
+
+  <p class="foot">Generated from the benchmark folders by <code>uv run binpick-dashboard</code>. The full numbers, with every caveat, are in each run's report.md. Reproduce a run with <code>uv run binpick-bench</code>.</p>
+</main>
+<div id="tip" role="tooltip"></div>
+<script>
+const DATA = /*DATA*/null;
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+const pct = x => x == null ? "–" : (100 * x).toFixed(1) + "%";
+const sec = x => x == null ? "–" : x.toFixed(2) + " s";
+const REASON = {no_seal: "No seal formed", seal_lost_grip: "Seal lost while gripping", seal_lost_lift: "Lost in lift",
+  seal_lost_transport: "Lost in transport", collision: "Stopped on contact / torn off", misplaced: "Not centered in its slot",
+  ik_fail: "Arm could not follow path", tray_full: "No free slot"};
+const WHY = {never: "no side fits the 44 mm lip", end: "fits only standing on its end", any: ""};
+
+function el(tag, attrs = {}, text) {
+  const e = tag === "svg" || ["rect", "line", "text", "g", "circle", "path"].includes(tag) ? document.createElementNS(NS, tag) : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text != null) e.textContent = text;
+  return e;
+}
+function chip(met) {
+  const s = el("span", {class: "chip " + (met ? "met" : "missed")});
+  s.append(el("span", {"aria-hidden": "true"}, met ? "✓" : "✕"), el("span", {}, met ? "Target met" : "Target missed"));
+  return s;
+}
+function table(head, rows, numeric = []) {
+  const t = el("table"), tr = el("tr");
+  head.forEach((h, i) => tr.append(el("th", numeric.includes(i) ? {class: "n"} : {}, h)));
+  t.append(tr);
+  rows.forEach(r => { const row = el("tr"); r.forEach((c, i) => row.append(el("td", numeric.includes(i) ? {class: "n"} : {}, c))); t.append(row); });
+  return t;
+}
+const tip = $("tip");
+function hover(node, lines) {
+  const show = ev => {
+    tip.replaceChildren(); lines.forEach((l, i) => { tip.append(i ? el("div", {}, l) : el("b", {}, l)); });
+    tip.style.display = "block";
+    const r = ev.clientX != null && ev.clientX ? {x: ev.clientX, y: ev.clientY} : (b => ({x: b.right, y: b.top}))(node.getBoundingClientRect());
+    tip.style.left = Math.min(r.x + 12, innerWidth - tip.offsetWidth - 8) + "px";
+    tip.style.top = Math.max(8, r.y - tip.offsetHeight - 10) + "px";
+  };
+  node.addEventListener("pointermove", show); node.addEventListener("focus", show);
+  node.addEventListener("pointerleave", () => tip.style.display = "none"); node.addEventListener("blur", () => tip.style.display = "none");
+  node.setAttribute("tabindex", "0");
+}
+
+// ---- comparison of runs (not scoped by the run filter)
+function rangeChart(id, key, rangeKey, target, lo, fmtTarget) {
+  const W = 480, rowH = 46, pad = {l: 150, r: 46, t: 22, b: 30}, H = pad.t + rowH * DATA.runs.length + pad.b;
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": id});
+  const x = v => pad.l + (v - lo) / (1 - lo) * (W - pad.l - pad.r);
+  const tick = (1 - lo) > 0.2 ? 0.1 : 0.05;
+  for (let v = lo; v <= 1.0001; v += tick) {
+    svg.append(el("line", {x1: x(v), x2: x(v), y1: pad.t, y2: H - pad.b, stroke: "var(--grid)"}));
+    svg.append(el("text", {x: x(v), y: H - pad.b + 16, "text-anchor": "middle"}, Math.round(v * 100) + "%"));
+  }
+  svg.append(el("line", {x1: x(target), x2: x(target), y1: pad.t, y2: H - pad.b, stroke: "var(--ink-2)", "stroke-width": 1}));
+  svg.append(el("text", {x: x(target), y: pad.t - 8, "text-anchor": "middle", class: "ink"}, fmtTarget));
+  DATA.runs.forEach((r, i) => {
+    const s = r.planners.rules, y = pad.t + rowH * i + rowH / 2, [a, b] = s[rangeKey] || [s[key], s[key]];
+    svg.append(el("text", {x: 0, y: y - 3, class: "ink"}, r.label));
+    svg.append(el("text", {x: 0, y: y + 12}, "seeds " + r.seeds));
+    const g = el("g");
+    g.append(el("rect", {x: pad.l, y: y - 14, width: W - pad.l - pad.r, height: 28, fill: "transparent"}));
+    g.append(el("line", {x1: x(Math.max(a, lo)), x2: x(b), y1: y, y2: y, stroke: "var(--rules)", "stroke-width": 2, "stroke-linecap": "round"}));
+    g.append(el("circle", {cx: x(Math.max(s[key], lo)), cy: y, r: 5, fill: "var(--rules)", stroke: "var(--surface)", "stroke-width": 2}));
+    g.append(el("text", {x: x(b) + 6, y: y + 4, class: "ink"}, pct(s[key])));
+    hover(g, [pct(s[key]), r.label + ", seeds " + r.seeds, "range " + pct(a) + " to " + pct(b)]);
+    svg.append(g);
+  });
+  $(id).replaceChildren(svg);
+  $(id + "T").replaceChildren(table(["Run", "Seeds", "Rate", "Range"], DATA.runs.map(r => {
+    const s = r.planners.rules, [a, b] = s[rangeKey] || [null, null];
+    return [r.label, r.seeds, pct(s[key]), pct(a) + " to " + pct(b)];
+  }), [2]));
+}
+
+// ---- one run
+function render(i) {
+  const run = DATA.runs[i], R = run.planners.rules, X = run.planners.random, T = DATA.targets;
+  [...$("runs").children].forEach((b, k) => b.setAttribute("aria-pressed", k === i));
+  $("runnote").textContent = `${run.note} Seeds ${run.seeds}, code ${run.commit}${run.dirty ? " (uncommitted changes)" : ""}${run.default_config ? "" : ", not the default settings"}${run.max_attempts ? ", stopped early" : ""}.`;
+  $("hero").textContent = pct(R.success_rate);
+  $("heroSide").replaceChildren(chip(R.success_rate >= T.success), el("div", {class: "d"}, `${R.successes} of ${R.attempts} attempts · target 95%`),
+    el("div", {class: "d"}, `Random baseline on the same bins: ${pct(X ? X.success_rate : null)}`));
+  const tiles = [
+    ["Bins emptied", `${R.emptied} / ${R.bins}`, R.emptying_rate >= T.emptying, `${pct(R.emptying_rate)} · target 95%`],
+    ["Mean cycle, successful picks", sec(R.cycle_mean_s), R.cycle_mean_s != null && R.cycle_mean_s <= T.cycle, `slowest ${sec(R.cycle_max_s)} · target 8 s`],
+    ["Parts placed", `${R.placed} / ${R.parts}`, null, `random: ${X ? X.placed + " / " + X.parts : "–"}`],
+    ["Sim time per placed part", sec(R.sim_time_per_placed_s), null, `with ${R.shakes} shakes and all failures`],
+  ];
+  $("tiles").replaceChildren(...tiles.map(([k, v, met, d]) => {
+    const c = el("div", {class: "card tile"});
+    c.append(el("div", {class: "k"}, k), el("div", {class: "v"}, v));
+    if (met !== null) c.append(chip(met));
+    c.append(el("div", {class: "d"}, d));
+    return c;
+  }));
+  // bins
+  const bins = run.bins.filter(b => b.planner === "rules");
+  $("cells").replaceChildren(...bins.map(b => {
+    const c = el("div", {class: "cell " + (b.emptied ? "ok" : "no"), "aria-label": `seed ${b.seed}: ${b.placed} of ${b.parts} placed`});
+    c.append(el("div", {class: "s"}, "seed " + b.seed), el("div", {class: "p"}, `${b.emptied ? "✓" : "✕"} ${b.placed}`));
+    hover(c, [`${b.placed} of ${b.parts} placed`, `seed ${b.seed}`, `${b.attempts} attempts, ${b.shakes} shakes`, `ended: ${b.stop}`]);
+    return c;
+  }));
+  $("cellsT").replaceChildren(table(["Seed", "Placed", "Attempts", "Shakes", "Ended"], bins.map(b => [b.seed, `${b.placed}/${b.parts}`, b.attempts, b.shakes, b.stop]), [0, 1, 2, 3]));
+  hist(run.cycles.rules, T.cycle, R.cycle_mean_s);
+  fails(run);
+  // side by side
+  const P = Object.keys(run.planners), rows = [
+    ["Success per attempt", s => pct(s.success_rate)], ["Successes / attempts", s => `${s.successes} / ${s.attempts}`],
+    ["Bins emptied", s => `${s.emptied} / ${s.bins}`], ["Parts placed", s => `${s.placed} / ${s.parts}`],
+    ["Mean cycle, successful picks", s => sec(s.cycle_mean_s)], ["Slowest successful pick", s => sec(s.cycle_max_s)],
+    ["Successful picks over 8 s", s => `${s.over_8s} / ${s.successes}`], ["Sim time per placed part", s => sec(s.sim_time_per_placed_s)],
+    ["Robot's own verdict wrong", s => String(s.verdict_wrong)], ["Arm or tool hit something (> 50 N)", s => String(s.arm_hits)],
+    ["Bins that failed to run", s => String(s.errors.length)]];
+  $("side").replaceChildren(table(["", ...P.map(p => p[0].toUpperCase() + p.slice(1))], rows.map(([k, f]) => [k, ...P.map(p => f(run.planners[p]))]), P.map((_, k) => k + 1)));
+  $("left").replaceChildren(run.left.length ? table(["Seed", "Part", "Size, mm", "kg", "Why"], run.left.map(p => [p.seed, `${p.shape} ${p.part}`, p.dims, p.kg.toFixed(2),
+    [p.state === "left" ? "" : p.state, WHY[p.grippable], p.tried ? "tried" : "never tried"].filter(Boolean).join("; ")]), [0, 3]) : el("p", {class: "caption"}, "None: every part was placed."));
+}
+
+function hist(cyc, target, mean) {
+  const W = 480, H = 240, pad = {l: 34, r: 10, t: 40, b: 34}, lo = 5, hi = 12, step = 0.25, n = Math.round((hi - lo) / step);
+  const counts = Array(n).fill(0); cyc.forEach(c => counts[Math.max(0, Math.min(n - 1, Math.floor((c - lo) / step)))]++);
+  const top = Math.max(5, Math.ceil(Math.max(...counts) / 10) * 10);
+  const x = v => pad.l + (v - lo) / (hi - lo) * (W - pad.l - pad.r), y = v => H - pad.b - v / top * (H - pad.t - pad.b);
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": "cycle time histogram"});
+  for (let v = 0; v <= top; v += top / 4) { svg.append(el("line", {x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), stroke: "var(--grid)"})); svg.append(el("text", {x: pad.l - 6, y: y(v) + 4, "text-anchor": "end"}, Math.round(v))); }
+  for (let v = lo; v <= hi; v++) svg.append(el("text", {x: x(v), y: H - pad.b + 16, "text-anchor": "middle"}, v + " s"));
+  const bw = Math.min(24, x(lo + step) - x(lo) - 2);
+  counts.forEach((c, k) => {
+    const g = el("g"), x0 = x(lo + k * step) + 1, h = y(0) - y(c);
+    g.append(el("rect", {x: x0, y: pad.t, width: x(lo + step) - x(lo), height: y(0) - pad.t, fill: "transparent"}));
+    if (c) g.append(el("path", {d: `M${x0},${y(0)} v${-(h - Math.min(4, h))} q0,${-Math.min(4, h)} ${Math.min(4, h)},${-Math.min(4, h)} h${bw - 2 * Math.min(4, h)} q${Math.min(4, h)},0 ${Math.min(4, h)},${Math.min(4, h)} v${h - Math.min(4, h)} z`, fill: "var(--rules)"}));
+    hover(g, [`${c} picks`, `${(lo + k * step).toFixed(2)}–${(lo + (k + 1) * step).toFixed(2)} s`]);
+    svg.append(g);
+  });
+  svg.append(el("line", {x1: pad.l, x2: W - pad.r, y1: y(0), y2: y(0), stroke: "var(--axis)"}));
+  svg.append(el("line", {x1: x(target), x2: x(target), y1: pad.t, y2: y(0), stroke: "var(--ink-2)"}));
+  svg.append(el("text", {x: x(target), y: 12, "text-anchor": "middle", class: "ink"}, "target 8 s"));
+  svg.append(el("line", {x1: x(target), x2: x(target), y1: 16, y2: pad.t, stroke: "var(--ink-2)"}));
+  if (mean != null) svg.append(el("text", {x: x(mean), y: pad.t - 6, "text-anchor": "end", class: "ink"}, `mean ${mean.toFixed(2)} s ▾`));
+  svg.append(el("text", {x: 0, y: 12}, "picks"));
+  $("hist").replaceChildren(svg);
+  $("histT").replaceChildren(table(["From", "To", "Picks"], counts.map((c, k) => [(lo + k * step).toFixed(2) + " s", (lo + (k + 1) * step).toFixed(2) + " s", c]).filter(r => r[2]), [2]));
+}
+
+function fails(run) {
+  const P = Object.keys(run.planners), causes = [...new Set(P.flatMap(p => Object.keys(run.planners[p].failures)))];
+  causes.sort((a, b) => (run.planners.rules.failures[b] || 0) - (run.planners.rules.failures[a] || 0) || (run.planners.random?.failures[b] || 0) - (run.planners.random?.failures[a] || 0));
+  const W = 480, rowH = 26, lab = 170, H = 22 + rowH * causes.length + 6, colW = (W - lab) / P.length;
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": "failed attempts by cause"});
+  P.forEach((p, j) => {
+    const max = Math.max(1, ...Object.values(run.planners[p].failures)), x0 = lab + j * colW;
+    svg.append(el("text", {x: x0, y: 12, class: "ink"}, p[0].toUpperCase() + p.slice(1) + ` (of ${run.planners[p].attempts})`));
+    causes.forEach((c, k) => {
+      const v = run.planners[p].failures[c] || 0, y = 22 + k * rowH, w = (colW - 44) * v / max, g = el("g");
+      g.append(el("rect", {x: x0, y, width: colW - 6, height: rowH - 4, fill: "transparent"}));
+      if (v) g.append(el("path", {d: `M${x0},${y + 4} h${Math.max(0, w - 4)} q4,0 4,4 v${rowH - 16} q0,4 -4,4 h${-Math.max(0, w - 4)} z`, fill: `var(--${p})`}));
+      g.append(el("text", {x: x0 + w + 5, y: y + 15, class: "ink"}, v));
+      hover(g, [`${v} attempts`, `${p}: ${REASON[c] || c}`]);
+      svg.append(g);
+    });
+  });
+  causes.forEach((c, k) => svg.append(el("text", {x: 0, y: 22 + k * rowH + 15, class: "ink"}, REASON[c] || c)));
+  $("fails").replaceChildren(svg);
+  $("failsT").replaceChildren(table(["Cause", ...P], causes.map(c => [REASON[c] || c, ...P.map(p => run.planners[p].failures[c] || 0)]), P.map((_, k) => k + 1)));
+}
+
+rangeChart("cmpSuccess", "success_rate", "success_range", DATA.targets.success, 0.85, "target 95%");
+rangeChart("cmpEmpty", "emptying_rate", "emptying_range", DATA.targets.emptying, 0.5, "target 95%");
+$("runs").replaceChildren(...DATA.runs.map((r, i) => { const b = el("button", {type: "button"}, r.label); b.onclick = () => render(i); return b; }));
+render(0);
+</script>
+</body>
+</html>

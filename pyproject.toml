@@ -20,6 +20,7 @@ binpick-scene = "binpick.cli:scene_main"
 binpick-demo = "binpick.cli:demo_main"
 binpick-run = "binpick.cli:run_main"
 binpick-bench = "binpick.cli:bench_main"
+binpick-dashboard = "binpick.cli:dashboard_main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
