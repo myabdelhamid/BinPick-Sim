@@ -1,0 +1,105 @@
+{
+  "rules": {
+    "attempts": 522,
+    "successes": 499,
+    "success_rate": 0.9559386973180076,
+    "success_range": [
+      0.9377006925305632,
+      0.9727626459143969
+    ],
+    "bins": 25,
+    "emptied": 24,
+    "emptying_rate": 0.96,
+    "parts": 500,
+    "placed": 499,
+    "emptying_range": [
+      0.8045552759497747,
+      0.9929039496133008
+    ],
+    "knocked_out": 0,
+    "dropped_into_slot": 0,
+    "left": 1,
+    "lost": 0,
+    "misplaced": 0,
+    "cycle_mean_s": 7.399715430861723,
+    "cycle_median_s": 7.272,
+    "cycle_max_s": 10.336,
+    "over_8s": 78,
+    "cycle_all_mean_s": 7.231766283524904,
+    "cycle_all_max_s": 10.336,
+    "sim_time_per_placed_s": 9.021206412825652,
+    "shakes": 191,
+    "hard_shakes": 36,
+    "failures": {
+      "seal_lost_lift": 11,
+      "collision": 10,
+      "no_seal": 2
+    },
+    "stops": {
+      "empty": 24,
+      "no_candidate": 1
+    },
+    "errors": [],
+    "risky_attempts": 9,
+    "verdict_wrong": 0,
+    "arm_hits": 0,
+    "left_over": {
+      "no side the 44 mm lip fits on, never tried (no_candidate)": 1
+    },
+    "ungrippable_bins": 1
+  },
+  "random": {
+    "attempts": 1000,
+    "successes": 32,
+    "success_rate": 0.032,
+    "success_range": [
+      0.022,
+      0.042
+    ],
+    "bins": 25,
+    "emptied": 0,
+    "emptying_rate": 0.0,
+    "parts": 500,
+    "placed": 32,
+    "emptying_range": [
+      0.0,
+      0.13319649395317873
+    ],
+    "knocked_out": 0,
+    "dropped_into_slot": 0,
+    "left": 458,
+    "lost": 0,
+    "misplaced": 10,
+    "cycle_mean_s": 8.015625,
+    "cycle_median_s": 7.970000000000001,
+    "cycle_max_s": 9.648,
+    "over_8s": 15,
+    "cycle_all_mean_s": 3.616486,
+    "cycle_all_max_s": 12.41,
+    "sim_time_per_placed_s": 113.0151875,
+    "shakes": 0,
+    "hard_shakes": 0,
+    "failures": {
+      "no_seal": 525,
+      "collision": 403,
+      "seal_lost_grip": 17,
+      "seal_lost_lift": 13,
+      "misplaced": 10
+    },
+    "stops": {
+      "attempt_limit": 25
+    },
+    "errors": [],
+    "risky_attempts": 0,
+    "verdict_wrong": 0,
+    "arm_hits": 9,
+    "left_over": {
+      "tried": 312,
+      "never tried (attempt_limit)": 143,
+      "lies in the tray, not centered in a slot of its own": 10,
+      "fits the lip only standing on its end, tried": 2,
+      "no side the 44 mm lip fits on, never tried (attempt_limit)": 1
+    },
+    "ungrippable_bins": 1
+  }
+}

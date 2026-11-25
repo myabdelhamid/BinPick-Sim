@@ -2,7 +2,7 @@
 
 Simulated robot cell: a Franka Panda with a 44 mm suction cup empties a cluttered bin of 20 mixed parts into a 5×4 tray grid, measured by a reproducible benchmark.
 
-Status: **milestone 5** (benchmark). The arm picks what its noisy depth camera sees, places parts in tray slots, retries and shakes the bin; one command measures it.
+Status: **milestone 6** (fixes after the benchmark). The arm picks what its noisy depth camera sees, places parts in tray slots, retries and shakes the bin; one command measures it.
 
 ## Setup
 

@@ -1,0 +1,51 @@
+{
+  "seeds": [
+    1240,
+    1241,
+    1242,
+    1243,
+    1244,
+    1245,
+    1246,
+    1247,
+    1248,
+    1249,
+    1250,
+    1251,
+    1252,
+    1253,
+    1254,
+    1255,
+    1256,
+    1257,
+    1258,
+    1259,
+    1260,
+    1261,
+    1262,
+    1263,
+    1264
+  ],
+  "planners": [
+    "rules",
+    "random"
+  ],
+  "commit": "b22dd8b0a9dc20955a0776832f6c9ae531a4fb05",
+  "dirty": false,
+  "max_attempts": null,
+  "config_sha256": "10546640fa7299055a01f8608d95e915d2492dad825802784693a5ed36498a77",
+  "default_config": true,
+  "workers": 6,
+  "command": "uv run binpick-bench --seeds 1240-1264 --out outputs/benchmark_m6_unused",
+  "started": "2026-11-25T10:28:02+01:00",
+  "wall_s": 1172.2,
+  "platform": "macOS-26.5.1-arm64-arm-64bit (arm64)",
+  "versions": {
+    "python": "3.12.15",
+    "mujoco": "4.0.1",
+    "mink": "1.4.0",
+    "numpy": "2.5.5",
+    "scipy": "1.18.1",
+    "open3d": "0.20.0"
+  }
+}
