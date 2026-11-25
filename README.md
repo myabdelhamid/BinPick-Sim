@@ -48,7 +48,7 @@ How suction works: the cup seals only if all 16 lip points land on the part and 
 uv run binpick-bench
 ```
 
-Runs the rules planner and the random baseline on the same 25 bins (seeds 1–25, 500 parts each), headless and in parallel (about 30 minutes on an M-series Mac; keep the lid open). Writes `outputs/benchmark/`:
+Runs the rules planner and the random baseline on the same 25 bins (seeds 1–25, 500 parts each), headless and in parallel (about 25 minutes on an M-series Mac; keep the lid open). Writes `outputs/benchmark/`:
 
 | File | What it is |
 |---|---|

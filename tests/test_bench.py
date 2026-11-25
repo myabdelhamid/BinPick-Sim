@@ -31,7 +31,7 @@ def test_results_do_not_depend_on_the_number_of_workers(tmp_path):
     texts = []
     for w in (1, 3):
         out = tmp_path / f"w{w}"
-        runner.run_benchmark([1000, 1001], ["random"], out, workers=w, max_attempts=2)
+        runner.run_benchmark([1000, 1001], ["rules", "random"], out, workers=w, max_attempts=2)
         texts.append((out / "attempts.csv").read_text() + (out / "parts.csv").read_text())
     assert texts[0] == texts[1]
 
@@ -54,16 +54,19 @@ def test_a_hanging_bin_is_stopped_and_counted(tmp_path, monkeypatch):
     out = tmp_path / "bench"
     errors = runner.run_benchmark([1001], ["random"], out, workers=1, max_attempts=1)
     assert len(errors) == 1 and "timed out" in errors[0]
+    assert [x["stop"] for x in csv.DictReader(open(out / "bins.csv"))] == ["error"]
 
 
 def test_overwrite_leaves_nothing_of_the_old_run(tmp_path):
     out = tmp_path / "bench"
     out.mkdir()
     (out / "bins").mkdir()
+    (out / runner.MARKER).write_text("")
     (out / "attempts.csv").write_text("old")
     (out / "bins" / "rules_7.json").write_text("{}")
     runner.run_benchmark([1000], ["random"], out, workers=1, max_attempts=1, overwrite=True)
     assert {r["seed"] for r in csv.DictReader(open(out / "attempts.csv"))} == {"1000"}
+    assert not (out / "bins" / "rules_7.json").exists()
 
 
 def test_overwrite_refuses_a_folder_that_is_not_a_benchmark(tmp_path):
@@ -75,8 +78,66 @@ def test_overwrite_refuses_a_folder_that_is_not_a_benchmark(tmp_path):
 
 def test_reserved_seeds_need_a_clean_tree(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "git_state", lambda: ("0" * 40, True))
+    monkeypatch.setattr(runner, "_run_process", lambda job: pytest.fail("must not run"))
     with pytest.raises(SystemExit, match="uncommitted"):
-        cli.bench_main(["--seeds", "1-2", "--out", str(tmp_path / "b")])
+        runner.run_benchmark([1, 2], ["random"], tmp_path / "b", workers=1)
+    assert not (tmp_path / "b").exists()
+
+
+@pytest.mark.parametrize("kw,match", [
+    ({"seeds": [1000, 1000]}, "twice"), ({"seeds": []}, "no seeds"), ({"planners": ["rules", "rules"]}, "twice"), ({"planners": ["x"]}, "unknown planner"),
+    ({"workers": 0}, "workers"), ({"config": "missing.yaml"}, "missing.yaml")])
+def test_bad_input_is_refused_before_anything_is_deleted(tmp_path, kw, match):
+    out = tmp_path / "bench"
+    (out / "bins").mkdir(parents=True)
+    (out / runner.MARKER).write_text("")
+    (out / "attempts.csv").write_text("old")
+    args = {"seeds": [1000], "planners": ["random"], "out": out, "workers": 1, "overwrite": True} | kw
+    with pytest.raises(SystemExit, match=match):
+        runner.run_benchmark(**args)
+    assert (out / "attempts.csv").read_text() == "old"
+
+
+def test_overwrite_can_reuse_the_folders_own_settings(tmp_path):
+    out = tmp_path / "bench"
+    runner.run_benchmark([1000], ["random"], out, workers=1, max_attempts=1)
+    before = (out / "attempts.csv").read_text()
+    runner.run_benchmark([1000], ["random"], out, workers=1, max_attempts=1, config=out / "config.yaml", overwrite=True)
+    assert (out / "attempts.csv").read_text() == before
+    assert json.loads((out / "meta.json").read_text())["default_config"]
+
+
+@pytest.mark.parametrize("files", [{"config.yaml": "other app"}, {"bins/precious.docx": "x", "meta.json": "{}"}])
+def test_overwrite_refuses_lookalikes(tmp_path, files):
+    for name, text in files.items():
+        (tmp_path / name).parent.mkdir(exist_ok=True)
+        (tmp_path / name).write_text(text)
+    with pytest.raises(SystemExit, match="not a benchmark folder"):
+        runner.run_benchmark([1000], ["random"], tmp_path, workers=1, overwrite=True)
+    assert all((tmp_path / name).read_text() == text for name, text in files.items())
+
+
+def test_a_corrupt_result_costs_one_bin_only(tmp_path, monkeypatch):
+    out = tmp_path / "bench"
+    real = runner._run_process
+
+    def corrupt(job):
+        err = real(job)
+        if job[0] == 1001:
+            (out / "bins" / "random_1001.json").write_text("{half")
+        return err
+
+    monkeypatch.setattr(runner, "_run_process", corrupt)
+    errors = runner.run_benchmark([1000, 1001], ["random"], out, workers=1, max_attempts=1)
+    assert len(errors) == 1 and "1001" in errors[0]
+    assert {x["seed"]: x["stop"] for x in csv.DictReader(open(out / "bins.csv"))}["1001"] == "error"
+
+
+def test_code_changed_during_the_run_is_recorded(tmp_path, monkeypatch):
+    states = iter([("a" * 40, False), ("a" * 40, True)])
+    monkeypatch.setattr(runner, "git_state", lambda: next(states))
+    runner.run_benchmark([1000], ["random"], tmp_path / "b", workers=1, max_attempts=1)
+    assert json.loads((tmp_path / "b" / "meta.json").read_text())["dirty"]
 
 
 @pytest.mark.parametrize("text,want", [("1-3", [1, 2, 3]), ("5", [5]), ("1,4-5", [1, 4, 5])])

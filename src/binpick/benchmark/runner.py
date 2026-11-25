@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -24,10 +25,12 @@ import numpy as np
 
 from binpick.config import DEFAULT_PATH, load_config
 from binpick.sim.parts import PartSpec, sample_parts
+from binpick.supervisor.run import PLANNERS
 
 RESERVED = range(1, 26)      # run only by the official benchmark, from committed code
 BIN_TIMEOUT_S = 3600.0       # a bin takes a few minutes
-KNOWN = {"attempts.csv", "bins.csv", "parts.csv", "events.jsonl", "meta.json", "config.yaml", "report.md", "summary.json", "bins"}
+MARKER = ".binpick-bench"    # written first, so that an interrupted run can be overwritten
+KNOWN = {MARKER, ".DS_Store", "attempts.csv", "bins.csv", "parts.csv", "events.jsonl", "meta.json", "config.yaml", "report.md", "summary.json", "bins"}
 BIN_COLUMNS = ["planner", "seed", "stop", "emptied", "placed", "left", "lost", "misplaced", "shakes", "hard_shakes", "attempts", "successes",
                "parts", "sim_time_s", "wall_s", "error"]
 PART_COLUMNS = ["planner", "seed", "part", "shape", "material", "dims_mm", "mass_kg", "state", "targeted", "grippable"]
@@ -54,8 +57,8 @@ def git_state() -> tuple[str, bool]:
 
 def grippable(p: PartSpec, cfg) -> str:
     """Can the frozen cup seal on this part at all? "any": on a side it can lie on; "end": a cylinder only standing on its
-    end; "never". (Geometry only: a centered lip must fit.)"""
-    lip = cfg.cup.diameter
+    end; "never". Geometry only: the ring of points where the seal is checked must fit, centered and turned the best way."""
+    lip = cfg.cup.diameter * np.cos(np.pi / cfg.suction.lip_points)
     if p.shape == "box":
         return "any" if sorted(p.dims)[1] >= lip else "never"
     dia, length = p.dims
@@ -106,20 +109,47 @@ def _write(path: Path, cols: list[str], rows: list[dict]) -> None:
         w.writerows(rows)
 
 
+def _check_overwritable(out: Path) -> None:
+    ours = (out / MARKER).exists() or (out / "meta.json").exists()
+    inside = {p.name for p in (out / "bins").iterdir()} if (out / "bins").is_dir() else set()
+    if not (ours and {p.name for p in out.iterdir()} <= KNOWN
+            and all(re.fullmatch(r"\.DS_Store|[a-z]+_\d+\.(csv|json)", n) for n in inside)):
+        raise SystemExit(f"{out} is not a benchmark folder; nothing deleted")
+
+
+def _twice(items: list) -> bool:
+    return len(set(items)) < len(items)
+
+
 def run_benchmark(seeds: list[int], planners: list[str], out: str | Path, workers: int, config: str | Path | None = None,
-                  max_attempts: int | None = None, overwrite: bool = False, command: str = "") -> list[str]:
-    """Run every (planner, seed), write the CSVs, return the errors."""
+                  max_attempts: int | None = None, overwrite: bool = False, command: str = "", allow_dirty: bool = False) -> list[str]:
+    """Run every (planner, seed), write the CSVs, return the errors. Everything is checked before anything is deleted."""
     out = Path(out).resolve()
+    if not seeds:
+        raise SystemExit("no seeds given")
+    if not planners or set(planners) - set(PLANNERS):
+        raise SystemExit(f"unknown planner in {planners}; expected {', '.join(PLANNERS)}")
+    if _twice(seeds) or _twice(planners):
+        raise SystemExit("a seed or planner is given twice")
+    if workers < 1:
+        raise SystemExit("workers must be at least 1")
+    source = Path(config or DEFAULT_PATH)
+    try:
+        settings = source.read_bytes()
+        cfg = load_config(source)
+    except Exception as e:
+        raise SystemExit(f"cannot use settings {source}: {e}") from None
+    commit, dirty = git_state()
+    if set(seeds) & set(RESERVED) and dirty and not allow_dirty:
+        raise SystemExit("seeds 1-25 are reserved for the benchmark and there are uncommitted changes; commit first or pass --allow-dirty")
     if out.exists():
         if not overwrite:
             raise SystemExit(f"{out} already exists; pass --overwrite to replace it")
-        if not {p.name for p in out.iterdir()} <= KNOWN:
-            raise SystemExit(f"{out} is not a benchmark folder; nothing deleted")
+        _check_overwritable(out)
         shutil.rmtree(out)
     (out / "bins").mkdir(parents=True)
-    shutil.copy(config or DEFAULT_PATH, out / "config.yaml")
-    cfg = load_config(out / "config.yaml")
-    commit, dirty = git_state()
+    (out / MARKER).write_text("")
+    (out / "config.yaml").write_bytes(settings)
     started, t0 = datetime.datetime.now().astimezone().isoformat(timespec="seconds"), time.perf_counter()
     jobs = [(s, p, str(out), str(out / "config.yaml"), max_attempts) for p in planners for s in seeds]
 
@@ -131,27 +161,37 @@ def run_benchmark(seeds: list[int], planners: list[str], out: str | Path, worker
     with ThreadPoolExecutor(workers) as ex:
         errs = list(ex.map(work, jobs))
 
-    attempts, bins, parts = [], [], []
+    attempts, bins, parts, failed = [], [], [], []
     with open(out / "events.jsonl", "w") as ev:
         for (seed, planner, *_), err in zip(jobs, errs):
             specs = sample_parts(cfg.parts, np.random.default_rng([seed, 0]))
             state, targeted = ["not run"] * len(specs), [0] * len(specs)
             row = dict.fromkeys(BIN_COLUMNS, 0) | {"planner": planner, "seed": seed, "stop": "error", "left": len(specs), "parts": len(specs),
                                                    "sim_time_s": 0.0, "wall_s": 0.0, "error": err}
-            if not err:
+            try:
+                if err:
+                    raise RuntimeError(err)
                 base = out / "bins" / f"{planner}_{seed}"
                 r = json.loads(Path(f"{base}.json").read_text())
-                state = r["part_state"]
                 with open(f"{base}.csv", newline="") as f:
                     mine = [{"planner": planner, **a} for a in csv.DictReader(f)]
+                result = {k: r[k] for k in ("stop", "placed", "lost", "misplaced", "shakes", "hard_shakes", "attempts", "successes")}
+                result |= {"left": r["left_in_bin"], "emptied": int(r["emptied"]), "sim_time_s": round(r["sim_time_s"], 3),
+                           "wall_s": round(r["wall_s"], 1)}
+                if len(r["part_state"]) != len(specs) or len(mine) != r["attempts"]:
+                    raise ValueError("its files are incomplete")
+                state, events = r["part_state"], r["events"]
+            except Exception as e:  # this bin only: reported, counted as not emptied
+                row["error"] = str(e) or repr(e)
+                failed.append(f"{planner} seed {seed}: {row['error']}")
+            else:
+                row |= result
                 attempts += mine
                 for a in mine:
                     if a["target_part"] != "":
                         targeted[int(a["target_part"])] += 1
-                for e in r["events"]:
+                for e in events:
                     ev.write(json.dumps({"planner": planner, **e}) + "\n")
-                row |= {k: r[k] for k in ("stop", "placed", "lost", "misplaced", "shakes", "hard_shakes", "attempts", "successes")}
-                row |= {"left": r["left_in_bin"], "emptied": int(r["emptied"]), "sim_time_s": round(r["sim_time_s"], 3), "wall_s": round(r["wall_s"], 1)}
             bins.append(row)
             parts += [{"planner": planner, "seed": seed, "part": p.id, "shape": p.shape, "material": p.material,
                        "dims_mm": "x".join(f"{1000 * x:.1f}" for x in p.dims), "mass_kg": round(p.mass, 3), "state": s, "targeted": t,
@@ -159,12 +199,13 @@ def run_benchmark(seeds: list[int], planners: list[str], out: str | Path, worker
     _write(out / "attempts.csv", list(attempts[0]) if attempts else ["planner", "seed", "attempt"], attempts)
     _write(out / "bins.csv", BIN_COLUMNS, bins)
     _write(out / "parts.csv", PART_COLUMNS, parts)
+    after = git_state()  # bins import the code as they start: a change during the run counts as uncommitted
     (out / "meta.json").write_text(json.dumps({
-        "seeds": seeds, "planners": planners, "commit": commit, "dirty": dirty, "max_attempts": max_attempts,
-        "config_sha256": hashlib.sha256((out / "config.yaml").read_bytes()).hexdigest(), "workers": workers, "command": command,
+        "seeds": seeds, "planners": planners, "commit": commit, "dirty": dirty or after != (commit, dirty), "max_attempts": max_attempts,
+        "config_sha256": hashlib.sha256(settings).hexdigest(), "default_config": settings == DEFAULT_PATH.read_bytes(), "workers": workers, "command": command,
         "started": started, "wall_s": round(time.perf_counter() - t0, 1), "platform": f"{platform.platform()} ({platform.machine()})",
         "versions": {"python": platform.python_version(), **{k: version(k) for k in ("mujoco", "mink", "numpy", "scipy", "open3d")}}}, indent=2))
-    return [f"{p} seed {s}: {e}" for (s, p, *_), e in zip(jobs, errs) if e]
+    return failed
 
 
 if __name__ == "__main__":

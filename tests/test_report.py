@@ -7,7 +7,7 @@ from binpick.benchmark.report import make_report
 from binpick.benchmark.runner import BIN_COLUMNS, PART_COLUMNS, grippable
 from binpick.sim.parts import PartSpec
 
-ATTEMPT = ["planner", "seed", "attempt", "target_part", "gripped_part", "outcome", "reason", "detected", "cycle_time_s", "safe", "arm_hit_n"]
+ATTEMPT = ["planner", "seed", "attempt", "target_part", "gripped_part", "outcome", "reason", "detected", "cycle_time_s", "safe", "arm_hit_n", "referee_ok"]
 
 
 def write(path, cols, rows):
@@ -29,7 +29,7 @@ def part_row(planner, seed, pid, **kw):
 
 def attempt(planner, seed, k, outcome="success", reason="", cycle=7.0, **kw):
     return {"planner": planner, "seed": seed, "attempt": k, "target_part": 0, "gripped_part": 0, "outcome": outcome, "reason": reason,
-            "detected": 1, "cycle_time_s": cycle, "safe": 1, "arm_hit_n": 0, **kw}
+            "detected": 1, "cycle_time_s": cycle, "safe": 1, "arm_hit_n": 0, "referee_ok": int(outcome == "success"), **kw}
 
 
 @pytest.fixture()
@@ -37,7 +37,7 @@ def folder(tmp_path):
     """rules: seed 1 empties (2/2), seed 2 places 1 of 2 in 3 attempts (one of them knocked out later), seed 3 crashed. random: nothing works."""
     write(tmp_path / "attempts.csv", ATTEMPT, [
         attempt("rules", 1, 1, cycle=6.0), attempt("rules", 1, 2, cycle=9.0),
-        attempt("rules", 2, 1, cycle=7.5), attempt("rules", 2, 2, "success", cycle=8.5), attempt("rules", 2, 3, "fail", "collision", 5.0, safe=0, detected=0),
+        attempt("rules", 2, 1, cycle=7.5), attempt("rules", 2, 2, "success", cycle=8.5, gripped_part=1), attempt("rules", 2, 3, "fail", "collision", 5.0, safe=0, detected=0),
         attempt("random", 1, 1, "fail", "no_seal", 3.0), attempt("random", 2, 1, "fail", "no_seal", 3.0), attempt("random", 3, 1, "fail", "collision", 3.0)])
     write(tmp_path / "bins.csv", BIN_COLUMNS, [
         bin_row("rules", 1), bin_row("rules", 2, emptied=0, placed=1, left=1, stop="no_candidate", attempts=3, shakes=4, hard_shakes=2, sim_time_s=45.0),
@@ -49,7 +49,7 @@ def folder(tmp_path):
         *[part_row("rules", 3, p, state="not run", targeted=0) for p in (0, 1)],
         *[part_row("random", s, p, state="left", targeted=int(p == 0)) for s in (1, 2, 3) for p in (0, 1)]])
     (tmp_path / "meta.json").write_text(json.dumps({"seeds": [1, 2, 3], "planners": ["rules", "random"], "commit": "abc", "dirty": False,
-                                                    "max_attempts": None, "config_sha256": "x", "platform": "p", "versions": {}, "workers": 2,
+                                                    "max_attempts": None, "config_sha256": "x", "default_config": True, "platform": "p", "versions": {}, "workers": 2,
                                                     "started": "t", "wall_s": 1.0, "command": "c"}))
     return tmp_path
 
@@ -65,7 +65,9 @@ def test_numbers_come_straight_from_the_files(folder):
     assert r["sim_time_per_placed_s"] == pytest.approx(75 / 3)
     assert r["failures"] == {"collision": 1} and r["errors"] == [3] and r["risky_attempts"] == 1
     assert r["verdict_wrong"] == 1 and r["arm_hits"] == 0
-    assert r["left_over"] == {"no side the cup can seal on": 1, "bin did not run": 2}
+    assert r["left_over"] == {"no side the 44 mm lip fits on, never tried (no_candidate)": 1, "bin did not run": 2}
+    assert (r["left"], r["lost"], r["misplaced"], r["shakes"], r["hard_shakes"]) == (3, 0, 0, 5, 2)
+    assert r["dropped_into_slot"] == 0 and r["emptying_range"][0] < 1 / 3 < r["emptying_range"][1]
 
 
 def test_a_planner_without_any_success_is_reported(folder):
@@ -78,7 +80,7 @@ def test_a_planner_without_any_success_is_reported(folder):
 
 def test_report_says_what_the_owner_requires(folder):
     text, _ = make_report(folder)
-    for must in ("1.75 kg", "no manufacturer part weights", "ERROR", "boom", "Zero overlap", "abc", "missed", "seed 3"):
+    for must in ("1.75 kg", "no manufacturer part weights", "ERROR", "boom", "nothing overlaps", "not in the success rate", "0.2 s", "abc", "missed", "seed 3"):
         assert must in text, must
     assert "| Pick success per attempt | ≥ 95% |" in text
 
@@ -98,7 +100,36 @@ def test_mismatched_files_are_refused(folder):
 
 
 @pytest.mark.parametrize("shape,dims,want", [
-    ("box", (0.08, 0.06, 0.02), "any"), ("box", (0.10, 0.0435, 0.030), "never"), ("box", (0.10, 0.0435, 0.06), "any"),
-    ("cylinder", (0.05, 0.08), "any"), ("cylinder", (0.042, 0.041), "never"), ("cylinder", (0.06, 0.042), "end"), ("cylinder", (0.042, 0.06), "any")])
+    ("box", (0.08, 0.06, 0.02), "any"), ("box", (0.10, 0.0430, 0.030), "never"), ("box", (0.10, 0.0430, 0.06), "any"),
+    ("cylinder", (0.05, 0.08), "any"), ("cylinder", (0.042, 0.041), "never"), ("cylinder", (0.06, 0.042), "end"), ("cylinder", (0.042, 0.06), "any"),
+    ("cylinder", (0.05, 0.0434), "any"), ("cylinder", (0.05, 0.0430), "end")])
 def test_grippable(cfg, shape, dims, want):
     assert grippable(PartSpec(0, shape, "plastic", dims, 0.2), cfg) == want
+
+
+def test_a_part_dropped_into_its_slot_is_shown_and_not_a_success(folder):
+    rows = list(csv.DictReader(open(folder / "attempts.csv")))
+    rows[3] |= {"outcome": "fail", "reason": "ik_fail", "referee_ok": 1, "gripped_part": 0}
+    write(folder / "attempts.csv", ATTEMPT, rows)
+    bins = list(csv.DictReader(open(folder / "bins.csv")))
+    bins[1]["successes"] = 1
+    write(folder / "bins.csv", BIN_COLUMNS, bins)
+    text, s = make_report(folder)
+    r = s["rules"]
+    assert r["successes"] == 3 and r["dropped_into_slot"] == 1 and r["knocked_out"] == 0 and r["placed"] == 3
+    assert r["cycle_mean_s"] == pytest.approx((6 + 9 + 7.5) / 3)
+
+
+def test_one_bin_gives_no_range(folder):
+    meta = json.loads((folder / "meta.json").read_text()) | {"seeds": [1], "planners": ["rules"]}
+    (folder / "meta.json").write_text(json.dumps(meta))
+    for name, cols in (("attempts", ATTEMPT), ("bins", BIN_COLUMNS), ("parts", PART_COLUMNS)):
+        write(folder / f"{name}.csv", cols, [r for r in csv.DictReader(open(folder / f"{name}.csv")) if r["seed"] == "1" and r["planner"] == "rules"])
+    assert make_report(folder)[1]["rules"]["success_range"] is None
+
+
+def test_other_settings_and_old_code_are_announced(folder):
+    meta = json.loads((folder / "meta.json").read_text())
+    (folder / "meta.json").write_text(json.dumps(meta | {"default_config": False, "dirty": True}))
+    text = make_report(folder)[0]
+    assert "Not the default settings" in text and "uncommitted code" in text

@@ -205,12 +205,9 @@ def bench_main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     seeds, planners = runner.parse_seeds(args.seeds), args.planners.split(",")
-    if unknown := set(planners) - set(PLANNERS):
-        raise SystemExit(f"unknown planner: {', '.join(sorted(unknown))}")
-    if set(seeds) & set(runner.RESERVED) and runner.git_state()[1] and not args.allow_dirty:
-        raise SystemExit("seeds 1-25 are reserved for the benchmark and there are uncommitted changes; commit first or pass --allow-dirty")
     command = " ".join(["uv run binpick-bench", *(sys.argv[1:] if argv is None else argv)])
-    errors = runner.run_benchmark(seeds, planners, args.out, args.workers, args.config, args.max_attempts, args.overwrite, command)
+    errors = runner.run_benchmark(seeds, planners, args.out, args.workers, args.config, args.max_attempts, args.overwrite, command,
+                                  args.allow_dirty)
     for name, r in write_report(args.out).items():
         rate = "-" if r["success_rate"] is None else f"{100 * r['success_rate']:.1f}%"
         print(f"{name}: success {r['successes']}/{r['attempts']} = {rate}, bins emptied {r['emptied']}/{r['bins']}, parts placed {r['placed']}/{r['parts']}")
