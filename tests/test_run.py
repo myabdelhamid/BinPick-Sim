@@ -257,3 +257,15 @@ def test_an_unreachable_safe_target_does_not_block_risky_ones(cfg, monkeypatch):
     monkeypatch.setattr(run, "rules_targets", far_safe_first)
     r = run_bin(stick_and_box(cfg), "rules", seed=0)
     assert r.placed == 1 and r.records[0].outcome == "success"
+
+
+def test_every_part_has_an_end_state(cfg):
+    r = run_bin(stick_and_box(cfg), "rules", seed=0)
+    assert r.part_state == ["left", "placed"] and r.hard_shakes == 2
+    assert [e["hard"] for e in r.events if e["event"] == "shake"] == [False, True, True]
+
+
+def test_attempts_log_what_the_planner_thought_and_the_weight_felt(cfg):
+    r = run_bin(loose_parts_scene(cfg), "rules", seed=0, max_attempts=1)
+    x = r.records[0]
+    assert x.safe and x.crowd == 0 and x.felt_kg == pytest.approx(0.29, abs=0.15)

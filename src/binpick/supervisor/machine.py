@@ -198,7 +198,7 @@ class Supervisor:
         n = np.asarray(target.normal, float)
 
         rec = AttemptRecord(self.seed, len(self.records) + 1, self._truth_part(target), tilt_deg=target.tilt_deg,
-                            est_seal=target.seal)
+                            est_seal=target.seal, safe=target.safe, crowd=target.crowd)
         self.records.append(rec)
         self.last_target, self._clear = target, False
         self._way_in = plan["approach"]
@@ -291,7 +291,7 @@ class Supervisor:
             path = cartesian_path(scene, self._q(), [p_grip, side, np.r_[side[:2], p1[2]]], R_grip[:, 2], self._grasp_yaw(), m)
             if not self._run(path, sideways_gain=cfg.motion.lift_sideways_gain):
                 raise _Abort("seal_lost_lift")
-            self.felt_mass_kg = self._pull() / G
+            self.felt_mass_kg = rec.felt_kg = self._pull() / G
 
         phase("lift", lift)
         slot = self.slots.peek()
@@ -413,7 +413,7 @@ class Supervisor:
         scene, sh = self.scene, self.scene.cfg.shaker
         if not self._clear:
             self._to_view()
-        self.events.append({"seed": self.seed, "time": scene.data.time, "event": "shake"})
+        self.events.append({"seed": self.seed, "time": scene.data.time, "event": "shake", "hard": hard})
         self._phase = "shake"
         acts = [scene.model.actuator(a).id for a in scene.shaker_actuators]
         amplitude, freq = (sh.hard_amplitude, sh.hard_freq_hz) if hard else (sh.amplitude, sh.freq_hz)

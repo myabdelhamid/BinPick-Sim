@@ -29,12 +29,15 @@ class AttemptRecord:
     cycle_time_s: float = 0.0
     tilt_deg: float = 0.0
     est_seal: float = 1.0                # planner's seal estimate
+    safe: bool = True                    # planner: free, centered and level
+    crowd: float = 0.0                   # planner: share of the outline with something taller beside it
+    felt_kg: float = 0.0                 # weight the arm felt at the end of the lift
     phase_times: dict[str, float] = field(default_factory=dict)
 
 
 def write_csv(records: list[AttemptRecord], path: str | Path) -> None:
     cols = ["seed", "attempt", "target_part", "gripped_part", "slot", "outcome", "reason", "sensed", "detected",
-            "verify_ok", "referee_ok", "lost_parts", "cycle_time_s", "tilt_deg", "est_seal", "arm_hit_n"] + [f"t_{p}" for p in PHASES]
+            "verify_ok", "referee_ok", "lost_parts", "cycle_time_s", "tilt_deg", "est_seal", "arm_hit_n", "safe", "crowd", "felt_kg"] + [f"t_{p}" for p in PHASES]
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
@@ -43,5 +46,5 @@ def write_csv(records: list[AttemptRecord], path: str | Path) -> None:
                         "" if r.slot is None else r.slot, r.outcome, r.reason, r.sensed, int(r.detected),
                         int(r.verify_ok),
                         int(r.referee_ok), ";".join(map(str, r.lost_parts)), f"{r.cycle_time_s:.3f}",
-                        f"{r.tilt_deg:.1f}", f"{r.est_seal:.3f}", f"{r.arm_hit_n:.0f}"]
+                        f"{r.tilt_deg:.1f}", f"{r.est_seal:.3f}", f"{r.arm_hit_n:.0f}", int(r.safe), f"{r.crowd:.3f}", f"{r.felt_kg:.2f}"]
                        + [f"{r.phase_times.get(p, 0.0):.3f}" for p in PHASES])

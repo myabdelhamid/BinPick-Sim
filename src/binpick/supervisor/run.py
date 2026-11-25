@@ -30,6 +30,8 @@ class BinResult:
     lost: int
     misplaced: int
     shakes: int
+    hard_shakes: int
+    part_state: list[str]     # ground truth per part: placed | left | lost | misplaced
     sim_time_s: float
     records: list[AttemptRecord] = field(default_factory=list)
     events: list[dict] = field(default_factory=list)
@@ -43,7 +45,7 @@ class BinResult:
         ct = [r.cycle_time_s for r in ok]
         return {"seed": self.seed, "planner": self.planner, "stop": self.stop, "emptied": self.emptied,
                 "placed": self.placed, "left_in_bin": self.left_in_bin, "lost": self.lost, "misplaced": self.misplaced,
-                "shakes": self.shakes, "attempts": len(self.records), "successes": len(ok), "fail_reasons": reasons,
+                "shakes": self.shakes, "hard_shakes": self.hard_shakes, "attempts": len(self.records), "successes": len(ok), "fail_reasons": reasons,
                 "cycle_mean_s": float(np.mean(ct)) if ct else None, "cycle_max_s": float(np.max(ct)) if ct else None,
                 "over_8s": sum(c > 8.0 for c in ct),
                 "cycle_mean_all_s": float(np.mean([r.cycle_time_s for r in self.records])) if self.records else None,
@@ -115,7 +117,9 @@ def run_bin(scene: Scene, planner: str, seed: int, observer: Callable[[Scene, st
     n = len(scene.parts)
     pos = [scene.data.xpos[b] for b in scene.part_body_ids]
     in_bin = {i for i in range(n) if i not in sup.lost and np.all(pos[i][:2] > lo[:2]) and np.all(pos[i][:2] < hi[:2])}
-    return BinResult(seed=seed, planner=planner, stop=stop, emptied=len(in_slot) == n, placed=len(in_slot),
+    state = ["placed" if i in in_slot else "lost" if i in sup.lost else "left" if i in in_bin else "misplaced" for i in range(n)]
+    hard = sum(e["event"] == "shake" and e["hard"] for e in sup.events)
+    return BinResult(seed=seed, planner=planner, stop=stop, hard_shakes=hard, part_state=state, emptied=len(in_slot) == n, placed=len(in_slot),
                      left_in_bin=len(in_bin), lost=len(sup.lost),
                      misplaced=n - len(in_slot) - len(in_bin) - len(sup.lost), shakes=shakes,
                      sim_time_s=float(scene.data.time - t0), records=sup.records, events=sup.events)
