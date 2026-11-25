@@ -96,7 +96,10 @@ def settle_parts(scene: Scene, rng: np.random.Generator) -> list[PartPose]:
             break
     mujoco.mj_forward(scene.model, scene.data)
     # a part wedged between others can jitter in place forever (contact solver); it goes nowhere
-    jitter = not _settled(scene, _part_dofs(scene, placed)) and _drift(scene) < DRIFT_MAX
+    jitter = False
+    for _ in range(FINAL_PASSES):  # a pile that still creeps gets more time
+        if _settled(scene, _part_dofs(scene, placed)) or (jitter := _drift(scene) < DRIFT_MAX):
+            break
     validate_settled(scene, jitter_ok=jitter)
     return [
         PartPose(p.id, scene.data.qpos[a:a + 3].copy(), scene.data.qpos[a + 3:a + 7].copy())

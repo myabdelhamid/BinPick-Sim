@@ -88,3 +88,9 @@ def test_real_motion_is_not_taken_for_jitter(cfg):
     a = scene.model.jnt_dofadr[scene.model.body_jntadr[scene.part_body_ids[top]]]
     scene.data.qvel[a + 2] = 0.5  # thrown upwards
     assert _drift(scene) > DRIFT_MAX
+
+
+def test_a_pile_that_needs_a_moment_longer_still_settles(cfg):
+    """Seed 1232: a part creeps during the first drift check, then only jitters in place."""
+    s, poses = make_settled_scene(cfg, 1232)
+    assert len(poses) == 20
