@@ -2,7 +2,7 @@
 
 Simulated robot cell: a Franka Panda with a 44 mm suction cup empties a cluttered bin of 20 mixed parts into a 5×4 tray grid, measured by a reproducible benchmark.
 
-Status: **milestone 2** (motion + state machine + suction model). The arm picks parts from known poses and places them in tray slots; perception-based planning comes in M3.
+Status: **milestone 5** (benchmark). The arm picks what its noisy depth camera sees, places parts in tray slots, retries and shakes the bin; one command measures it.
 
 ## Setup
 
@@ -41,6 +41,30 @@ uv run binpick-demo --seed 1000 --picks 3 --video
 Writes `outputs/demo_seed1000/attempts.csv` (one row per attempt: outcome, failure reason, cycle time, time per phase), `events.json` (planning rejections), and `demo.mp4`.
 
 How suction works: the cup seals only if all 16 lip points land on the part and the surface height under the lip varies by less than the bellows can absorb (edges, tilt and curvature break the seal). A sealed cup holds the part; every physics step the grip's real load (tension, peel moment, shear) is compared with what the seal can hold (39 N, the Piab B40 datasheet pull at 60 kPa). Overload breaks the seal and the part falls. The robot only sees a noisy vacuum sensor and the cameras.
+
+## Benchmark
+
+```bash
+uv run binpick-bench
+```
+
+Runs the rules planner and the random baseline on the same 25 bins (seeds 1–25, 500 parts each), headless and in parallel (about 30 minutes on an M-series Mac; keep the lid open). Writes `outputs/benchmark/`:
+
+| File | What it is |
+|---|---|
+| `report.md` | the results, side by side, with failure causes and what to know before using them |
+| `attempts.csv` | every attempt: outcome, reason, cycle time, time per phase |
+| `bins.csv`, `parts.csv` | one row per bin, one row per part |
+| `events.jsonl` | shakes and rejected targets |
+| `summary.json`, `meta.json`, `config.yaml` | the numbers for machines; code version, machine and settings |
+
+The same seed gives the same result whatever the number of workers. A bin that fails to run is named in the report and counts as not emptied.
+
+## Empty one bin and film it
+
+```bash
+uv run binpick-run --seed 1220 --planner rules --video
+```
 
 ## Look at it interactively (macOS)
 

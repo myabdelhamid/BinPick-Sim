@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -183,3 +185,36 @@ def run_main(argv: list[str] | None = None) -> int:
     print(f"{res.planner}, seed {seed}: {res.placed}/{len(scene.parts)} placed in {len(res.records)} attempts, "
           f"{res.shakes} shakes, stopped: {res.stop}; wrote {out}")
     return 0
+
+
+def bench_main(argv: list[str] | None = None) -> int:
+    """Run the benchmark and write the report."""
+    from binpick.benchmark import runner
+    from binpick.benchmark.report import write_report
+    from binpick.supervisor.run import PLANNERS
+
+    ap = argparse.ArgumentParser(prog="binpick-bench", description="Run every planner on every seed and write a report.")
+    ap.add_argument("--seeds", default="1-25", help='for example "1-25" or "1000,1005-1010"')
+    ap.add_argument("--planners", default=",".join(PLANNERS))
+    ap.add_argument("--workers", type=int, default=max(1, min(6, (os.cpu_count() or 2) - 2)))
+    ap.add_argument("--max-attempts", type=int, default=None, help="stop bins early (smoke test only; the report says so)")
+    ap.add_argument("--config", default=None)
+    ap.add_argument("--out", default="outputs/benchmark")
+    ap.add_argument("--overwrite", action="store_true", help="replace an existing benchmark folder")
+    ap.add_argument("--allow-dirty", action="store_true", help="run the reserved seeds from uncommitted code (the report says so)")
+    args = ap.parse_args(argv)
+
+    seeds, planners = runner.parse_seeds(args.seeds), args.planners.split(",")
+    if unknown := set(planners) - set(PLANNERS):
+        raise SystemExit(f"unknown planner: {', '.join(sorted(unknown))}")
+    if set(seeds) & set(runner.RESERVED) and runner.git_state()[1] and not args.allow_dirty:
+        raise SystemExit("seeds 1-25 are reserved for the benchmark and there are uncommitted changes; commit first or pass --allow-dirty")
+    command = " ".join(["uv run binpick-bench", *(sys.argv[1:] if argv is None else argv)])
+    errors = runner.run_benchmark(seeds, planners, args.out, args.workers, args.config, args.max_attempts, args.overwrite, command)
+    for name, r in write_report(args.out).items():
+        rate = "-" if r["success_rate"] is None else f"{100 * r['success_rate']:.1f}%"
+        print(f"{name}: success {r['successes']}/{r['attempts']} = {rate}, bins emptied {r['emptied']}/{r['bins']}, parts placed {r['placed']}/{r['parts']}")
+    for e in errors:
+        print("ERROR", e)
+    print(f"report: {Path(args.out) / 'report.md'}")
+    return 1 if errors else 0
