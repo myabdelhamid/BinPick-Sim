@@ -298,12 +298,17 @@ def test_free_sides_before_boxed_in(cfg):
 
 def test_a_part_hidden_under_the_side_of_a_tall_one_is_not_safe(cfg):
     """Seen at a slant, the tall part's side hides a wide strip next to the visible face: unseen is not free."""
-    for seed, where in ((1009, [0.0596, 0.0850]), (1002, [0.3576, 0.2366])):
-        s, _ = make_settled_scene(cfg, seed)
-        s.sensor_rng = np.random.default_rng([seed, 5])
-        lo, _ = s.bin_inner_bounds()
-        near = [t for t in targets(s) if np.linalg.norm(t.pos[:2] - lo[:2] - where) < 0.02]
-        assert not any(t.safe for t in near), seed
+    specs = [PartSpec(0, "box", "plastic", (0.0549, 0.1056, 0.0229), 0.16), PartSpec(1, "box", "plastic", (0.0709, 0.0929, 0.0694), 0.55)]
+    s = build_scene(cfg, specs)
+    lo, _ = s.bin_inner_bounds()
+    for a, p, q in zip(s.part_qpos_adr, ([0.0815, 0.0918, 0.0113], [0.139, 0.1336, 0.0562]),
+                       ([-0.8039, 0.0032, 0.0018, 0.5948], [0.1559, -0.4565, 0.5404, 0.6893])):  # as seen in a real pile
+        s.data.qpos[a:a + 3] = lo + p
+        s.data.qpos[a + 3:a + 7] = np.array(q) / np.linalg.norm(q)
+    for k in range(5):
+        s.sensor_rng = np.random.default_rng(k)
+        low = [t for t in targets(s) if t.pos[2] < lo[2] + 0.03]
+        assert low and not any(t.safe for t in low), k
 
 
 @pytest.mark.parametrize("dia,length", [(0.050, 0.0455), (0.050, 0.047), (0.042, 0.046), (0.060, 0.047)])

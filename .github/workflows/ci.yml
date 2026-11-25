@@ -13,4 +13,9 @@ jobs:
       - name: System libs for headless rendering
         run: sudo apt-get update && sudo apt-get install -y libegl1 libegl-mesa0 libgl1-mesa-dri libosmesa6 libgl1
       - run: uv sync --frozen
-      - run: uv run pytest -q
+      - name: Tests
+        shell: bash  # with pipefail
+        run: uv run pytest -q -rf --tb=short 2>&1 | tee pytest.log
+      - name: Name the failing tests
+        if: failure()
+        run: grep -E "^(FAILED|ERROR)" pytest.log | sed 's/^/::error::/' || true
