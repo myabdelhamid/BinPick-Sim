@@ -52,4 +52,4 @@ Two parts lifted (camera after lift is not available: tray camera sees two) or p
 
 ## Outcome (2026-11-25)
 Done: Tasks 1–4, 6, the lift of Task 5 (stiffer and away from walls; yielding to the load was tried three ways and was worse), the measurements and the review fix pass. Added: narrow faces and short cylinders, guarded approach, harder shakes, "face barely wider than the cup is risky".
-Not built: giving up a stuck lift before the seal breaks (Task 5), detecting two lifted parts and a standing test of the robot's verdict against the referee (Task 7; measured instead: 0 disagreements in 1,266 rules attempts on the three 20-bin runs), checks of transport and retreat paths (Task 6; no arm hits seen).
+Not built: giving up a stuck lift before the seal breaks (Task 5), detecting two lifted parts and a standing test of the robot's verdict against the referee (Task 7; measured instead: 1 disagreement in 1,266 rules attempts on three 20-bin sets), checks of transport and retreat paths (Task 6; no arm hits seen).

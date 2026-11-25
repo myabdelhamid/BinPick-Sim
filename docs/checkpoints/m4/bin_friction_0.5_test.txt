@@ -1,0 +1,12 @@
+1005 placed 19/20 attempts 19 shakes 10 stop no_candidate left 1 lost 0 misplaced 0 {}
+1003 placed 20/20 attempts 20 shakes 6 stop empty left 0 lost 0 misplaced 0 {}
+1004 placed 18/20 attempts 19 shakes 8 stop tray_full left 1 lost 0 misplaced 1 {'seal_lost_transport': 1}
+1001 placed 20/20 attempts 21 shakes 5 stop empty left 0 lost 0 misplaced 0 {'ik_fail': 1}
+1002 placed 20/20 attempts 22 shakes 11 stop empty left 0 lost 0 misplaced 0 {'ik_fail': 2}
+1000 placed 18/20 attempts 23 shakes 22 stop no_candidate left 2 lost 0 misplaced 0 {'no_seal': 5}
+1006 placed 20/20 attempts 20 shakes 6 stop empty left 0 lost 0 misplaced 0 {}
+1008 placed 19/20 attempts 19 shakes 10 stop no_candidate left 1 lost 0 misplaced 0 {}
+1007 placed 18/20 attempts 19 shakes 10 stop no_candidate left 2 lost 0 misplaced 0 {'seal_lost_lift': 1}
+1009 placed 19/20 attempts 21 shakes 13 stop no_candidate left 1 lost 0 misplaced 0 {'ik_fail': 1, 'seal_lost_lift': 1}
+rules: success 191/203 = 94.1%  emptied 4/10  placed 191/200  errors []  failures {'seal_lost_transport': 1, 'ik_fail': 4, 'no_seal': 5, 'seal_lost_lift': 2}
+cycle: successful picks mean 8.10 s max 9.67 s, over 8 s 100/191; all attempts mean 7.85 s; sim time per placed part incl. shakes 10.2 s
