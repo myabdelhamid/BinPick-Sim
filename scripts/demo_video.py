@@ -1,10 +1,17 @@
 """Two-minute demo video: what the robot sees, the rules planner emptying a bin it was never tuned on, the random
 baseline on the same bin, and the benchmark results. Usage:
     uv run python scripts/demo_video.py [OUT.mp4]
-Numbers on the cards are read from the benchmark folders in docs/checkpoints; nothing is typed in by hand."""
+Numbers on the cards come from the filmed run, which is checked against the benchmark's record of the same bin, and from the
+benchmark folders in docs/checkpoints."""
 
 from __future__ import annotations
 
+import os
+
+for _k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ[_k] = "1"  # as the benchmark runs its bins, so the filmed run is the benchmark's run
+
+import csv
 import sys
 import textwrap
 from pathlib import Path
@@ -17,9 +24,8 @@ from PIL import Image, ImageDraw, ImageFont
 from binpick.benchmark.report import make_report
 from binpick.cli import depth_preview
 from binpick.config import load_config
-from binpick.perception.view import observe_bin
+from binpick.perception.view import depth_to_cloud, observe_bin
 from binpick.planning.rules import rules_targets
-from binpick.perception.view import depth_to_cloud
 from binpick.sim.camera import intrinsics, render, sense_depth
 from binpick.sim.settle import make_settled_scene
 from binpick.supervisor.run import run_bin
@@ -111,12 +117,12 @@ def what_it_sees(cfg) -> Image.Image:
         u, v = K[0, 0] * c[0] / -c[2] + K[0, 2], K[1, 1] * -c[1] / -c[2] + K[1, 2]
         d.ellipse((u - 9, v - 9, u + 9, v + 9), fill=GOOD if t.safe else ORANGE, outline=(255, 255, 255), width=3)
     filled = np.nan_to_num(depth, nan=np.nanmax(depth))
-    panels = [("Camera image", Image.fromarray(rgb)), ("Depth, with noise", Image.fromarray(depth_preview(filled))),
+    panels = [("Colour image (for people)", Image.fromarray(rgb)), ("Depth, with noise", Image.fromarray(depth_preview(filled))),
               ("Surfaces and pick points", top)]
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
     d.text((40, 30), "What the robot sees", font=font(40, True), fill=INK)
-    d.text((40, 84), "One top-down depth camera. It finds smooth surfaces, then where a 44 mm cup can seal (green: safe pick, orange: risky).",
+    d.text((40, 84), "It uses only the depth image: smooth surfaces, then where a 44 mm cup can seal (green: safe pick, orange: risky).",
            font=font(22), fill=INK2)
     for k, (name, p) in enumerate(panels):
         p = p.copy()
@@ -204,15 +210,22 @@ def main() -> int:
                "Simulation (MuJoCo). Seed 1240: the first of 25 seeds nobody had looked at before the final benchmark."), 7)
     v.add(what_it_sees(cfg), 10)
     rules = film_run(v, cfg, "rules", RULES_SPEED, None, f"Rules planner · seed {SEED}")
-    left = 20 - rules.get("placed", 0)
+    bench = ROOT / RUNS[0][0]
+    row = next(b for b in csv.DictReader(open(bench / "bins.csv")) if b["planner"] == "rules" and int(b["seed"]) == SEED)
+    assert (rules["placed"], rules["attempts"], rules["shakes"]) == (int(row["placed"]), int(row["attempts"]), int(row["shakes"])), \
+        "the filmed run differs from the benchmark's run of this bin"
+    why = {"never": "fits the 44 mm cup on no side", "end": "fits the 44 mm cup only standing on an end"}
+    left = [p for p in csv.DictReader(open(bench / "parts.csv")) if p["planner"] == "rules" and int(p["seed"]) == SEED and p["state"] != "placed"]
     v.add(card(f"Rules planner: {rules['placed']} of 20 placed, {rules['successes']} of {rules['attempts']} attempts succeeded",
                [f"Mean cycle {rules['cycle_mean_s']:.1f} s per successful pick, {rules['shakes']} shakes.",
-                *(["The part left over is a cylinder too short for the 44 mm cup to seal on its side."] if left == 1 else []),
+                *[f"Left over: a {p['shape']} of {p['dims_mm']} mm, which {why[p['grippable']]}." if p["grippable"] in why
+                  else f"Left over: a {p['shape']} of {p['dims_mm']} mm ({p['state']})." for p in left],
                 "Next: the random baseline on the same bin. Same camera, arm and placing; only the pick point is random."]), 7)
-    film_run(v, cfg, "random", RANDOM_SPEED, RANDOM_SIM_S, f"Random baseline · seed {SEED}")
+    film_run(v, cfg, "random", RANDOM_SPEED, RANDOM_SIM_S, f"Random · seed {SEED} · first {RANDOM_SIM_S:.0f} s shown")
     v.add(results_card(), 14)
     v.add(card("What limits it", ["Parts wedged between neighbours or against a wall: lifting tears the grip off.",
-                                  "Short cylinders: the 44 mm cup cannot seal on their side. This alone decides the bins not emptied.",
+                                  "Short cylinders: the 44 mm cup cannot seal on their side. In the final runs, every bin not emptied had one.",
+                                  "One part torn off 11 times in one bin: the planner does not stop retrying a part that keeps failing.",
                                   "It is a simulation: the cup's hold when tilted, the camera noise and the part weights are assumptions."],
                "Results, dashboard and every logged attempt: docs/RESULTS.md, docs/dashboard.html, docs/checkpoints/"), 9)
     v.add(card("Reproduce", ["uv run binpick-bench   (seeds 1–25, both planners, about 30 minutes)",

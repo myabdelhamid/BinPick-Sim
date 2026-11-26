@@ -13,7 +13,8 @@ and a one-command benchmark measures it against a random baseline on the same bi
 | Seeds 1–25, final code (rerun after fixes) | 95.6% | 24 / 25 | 7.40 s | 3.2% |
 | Seeds 1–25, first run, blind | 95.4% | 22 / 25 | 8.09 s | 3.6% |
 
-The unused seeds are the fairest estimate. Every bin not emptied has one cylinder too short for the 44 mm cup to grip on its side.
+The unused seeds are the fairest estimate. In the final runs, every bin not emptied has one cylinder too short for the 44 mm cup to
+grip on its side; in the first run two heavy parts also fell out of the cell.
 It is a simulation: what is assumed is listed in [RESULTS.md](docs/RESULTS.md#what-is-real-and-what-is-assumed).
 
 ## Setup
@@ -30,7 +31,7 @@ uv sync
 uv run binpick-bench
 ```
 
-Runs the rules planner and the random baseline on the same 25 bins (seeds 1–25, 500 parts each), headless and in parallel, in about
+Runs the rules planner and the random baseline on the same 25 bins (seeds 1–25, 500 parts per planner), headless and in parallel, in about
 30 minutes on an M-series Mac (keep the lid open: closed, the Mac overheats and stalls). Other seeds: `--seeds 1240-1264 --out
 outputs/unused`. Writes `outputs/benchmark/`:
 

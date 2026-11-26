@@ -77,6 +77,8 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space:
 .cell.ok { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
 .cell.no { background: color-mix(in srgb, var(--serious) 22%, var(--surface)); }
 .cell:hover, .cell:focus { border-color: var(--ink-2); }
+svg g:focus { outline: 2px solid var(--ink-2); outline-offset: 1px; }
+svg g:focus-visible { outline: 2px solid var(--ink-2); }
 #tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--ring);
   border-radius: 8px; padding: 7px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); display: none; z-index: 10; max-width: 260px; }
 #tip b { font-size: 14px; }
@@ -106,7 +108,7 @@ code { font-size: 12.5px; }
   <section style="margin-top:6px">
     <div class="card">
       <div class="hero">
-        <div><div class="tile"><span class="k">Success per attempt, rules planner</span></div><div class="v" id="hero"></div></div>
+        <div><div class="tile"><span class="k" id="heroLabel">Success per attempt</span></div><div class="v" id="hero"></div></div>
         <div class="tile" id="heroSide"></div>
       </div>
     </div>
@@ -115,8 +117,8 @@ code { font-size: 12.5px; }
 
   <section>
     <div class="card">
-      <h2>Every bin, rules planner</h2>
-      <p class="caption">Parts placed out of 20. <span class="chip met">✓</span> green: emptied. <span class="chip missed">✕</span> orange: a part was left.</p>
+      <h2 id="binsTitle">Every bin</h2>
+      <p class="caption">Parts placed out of 20. <span class="chip met">✓</span> green: emptied. <span class="chip missed">✕</span> red: a part was left.</p>
       <div class="cells" id="cells"></div>
       <details><summary>Table</summary><div class="scroll" id="cellsT"></div></details>
     </div>
@@ -124,14 +126,14 @@ code { font-size: 12.5px; }
 
   <section class="grid g2">
     <figure class="card" style="margin:0">
-      <h2>Cycle time of successful picks, rules planner</h2>
+      <h2>Cycle time of successful picks, first planner shown</h2>
       <p class="caption">Photo to end of tray check, nothing overlapping. Target 8 s.</p>
       <div id="hist"></div>
       <details><summary>Table</summary><div class="scroll" id="histT"></div></details>
     </figure>
     <figure class="card" style="margin:0">
       <h2>Failed attempts by cause</h2>
-      <p class="caption">Each planner on its own scale: random fails about 30 times as often.</p>
+      <p class="caption" id="failsCap"></p>
       <div class="legend"><span><i style="background:var(--rules)"></i>Rules</span><span><i style="background:var(--random)"></i>Random</span></div>
       <div id="fails"></div>
       <details><summary>Table</summary><div class="scroll" id="failsT"></div></details>
@@ -140,7 +142,7 @@ code { font-size: 12.5px; }
 
   <section class="grid g2">
     <div class="card"><h2>Both planners</h2><div class="scroll" id="side"></div></div>
-    <div class="card"><h2>Parts the rules planner did not place</h2><div class="scroll" id="left"></div></div>
+    <div class="card"><h2>Parts the first planner did not place</h2><div class="scroll" id="left"></div></div>
   </section>
 
   <p class="foot">Generated from the benchmark folders by <code>uv run binpick-dashboard</code>. The full numbers, with every caveat, are in each run's report.md. Reproduce a run with <code>uv run binpick-bench</code>.</p>
@@ -169,9 +171,10 @@ function chip(met) {
   return s;
 }
 function table(head, rows, numeric = []) {
-  const t = el("table"), tr = el("tr");
-  head.forEach((h, i) => tr.append(el("th", numeric.includes(i) ? {class: "n"} : {}, h)));
-  t.append(tr);
+  const t = el("table"), thead = el("thead"), tr = el("tr");
+  head.forEach((h, i) => tr.append(el("th", {scope: "col", ...(numeric.includes(i) ? {class: "n"} : {})}, h)));
+  thead.append(tr);
+  t.append(thead);
   rows.forEach(r => { const row = el("tr"); r.forEach((c, i) => row.append(el("td", numeric.includes(i) ? {class: "n"} : {}, c))); t.append(row); });
   return t;
 }
@@ -187,12 +190,13 @@ function hover(node, lines) {
   node.addEventListener("pointermove", show); node.addEventListener("focus", show);
   node.addEventListener("pointerleave", () => tip.style.display = "none"); node.addEventListener("blur", () => tip.style.display = "none");
   node.setAttribute("tabindex", "0");
+  node.setAttribute("aria-label", lines.join(", "));
 }
 
 // ---- comparison of runs (not scoped by the run filter)
 function rangeChart(id, key, rangeKey, target, lo, fmtTarget) {
   const W = 480, rowH = 46, pad = {l: 150, r: 46, t: 22, b: 30}, H = pad.t + rowH * DATA.runs.length + pad.b;
-  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": id});
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": id === "cmpSuccess" ? "Success per attempt by run" : "Bins emptied by run"});
   const x = v => pad.l + (v - lo) / (1 - lo) * (W - pad.l - pad.r);
   const tick = (1 - lo) > 0.2 ? 0.1 : 0.05;
   for (let v = lo; v <= 1.0001; v += tick) {
@@ -202,12 +206,13 @@ function rangeChart(id, key, rangeKey, target, lo, fmtTarget) {
   svg.append(el("line", {x1: x(target), x2: x(target), y1: pad.t, y2: H - pad.b, stroke: "var(--ink-2)", "stroke-width": 1}));
   svg.append(el("text", {x: x(target), y: pad.t - 8, "text-anchor": "middle", class: "ink"}, fmtTarget));
   DATA.runs.forEach((r, i) => {
-    const s = r.planners.rules, y = pad.t + rowH * i + rowH / 2, [a, b] = s[rangeKey] || [s[key], s[key]];
+    const s = r.planners.rules || Object.values(r.planners)[0], y = pad.t + rowH * i + rowH / 2, [a, b] = s[rangeKey] || [s[key], s[key]];
     svg.append(el("text", {x: 0, y: y - 3, class: "ink"}, r.label));
     svg.append(el("text", {x: 0, y: y + 12}, "seeds " + r.seeds));
     const g = el("g");
     g.append(el("rect", {x: pad.l, y: y - 14, width: W - pad.l - pad.r, height: 28, fill: "transparent"}));
     g.append(el("line", {x1: x(Math.max(a, lo)), x2: x(b), y1: y, y2: y, stroke: "var(--rules)", "stroke-width": 2, "stroke-linecap": "round"}));
+    if (s[key] < lo) g.append(el("text", {x: x(lo) - 2, y: y + 4, "text-anchor": "end", class: "ink"}, "◂"));
     g.append(el("circle", {cx: x(Math.max(s[key], lo)), cy: y, r: 5, fill: "var(--rules)", stroke: "var(--surface)", "stroke-width": 2}));
     g.append(el("text", {x: x(b) + 6, y: y + 4, class: "ink"}, pct(s[key])));
     hover(g, [pct(s[key]), r.label + ", seeds " + r.seeds, "range " + pct(a) + " to " + pct(b)]);
@@ -215,16 +220,19 @@ function rangeChart(id, key, rangeKey, target, lo, fmtTarget) {
   });
   $(id).replaceChildren(svg);
   $(id + "T").replaceChildren(table(["Run", "Seeds", "Rate", "Range"], DATA.runs.map(r => {
-    const s = r.planners.rules, [a, b] = s[rangeKey] || [null, null];
+    const s = r.planners.rules || Object.values(r.planners)[0], [a, b] = s[rangeKey] || [null, null];
     return [r.label, r.seeds, pct(s[key]), pct(a) + " to " + pct(b)];
   }), [2]));
 }
 
 // ---- one run
 function render(i) {
-  const run = DATA.runs[i], R = run.planners.rules, X = run.planners.random, T = DATA.targets;
+  const run = DATA.runs[i], T = DATA.targets, first = Object.keys(run.planners)[0];
+  const lead = run.planners.rules ? "rules" : first;
+  const R = run.planners[lead], X = run.planners.random && run.planners.rules ? run.planners.random : null;
   [...$("runs").children].forEach((b, k) => b.setAttribute("aria-pressed", k === i));
   $("runnote").textContent = `${run.note} Seeds ${run.seeds}, code ${run.commit}${run.dirty ? " (uncommitted changes)" : ""}${run.default_config ? "" : ", not the default settings"}${run.max_attempts ? ", stopped early" : ""}.`;
+  $("heroLabel").textContent = `Success per attempt, ${lead} planner`;
   $("hero").textContent = pct(R.success_rate);
   $("heroSide").replaceChildren(chip(R.success_rate >= T.success), el("div", {class: "d"}, `${R.successes} of ${R.attempts} attempts · target 95%`),
     el("div", {class: "d"}, `Random baseline on the same bins: ${pct(X ? X.success_rate : null)}`));
@@ -242,7 +250,8 @@ function render(i) {
     return c;
   }));
   // bins
-  const bins = run.bins.filter(b => b.planner === "rules");
+  $("binsTitle").textContent = `Every bin, ${lead} planner`;
+  const bins = run.bins.filter(b => b.planner === lead);
   $("cells").replaceChildren(...bins.map(b => {
     const c = el("div", {class: "cell " + (b.emptied ? "ok" : "no"), "aria-label": `seed ${b.seed}: ${b.placed} of ${b.parts} placed`});
     c.append(el("div", {class: "s"}, "seed " + b.seed), el("div", {class: "p"}, `${b.emptied ? "✓" : "✕"} ${b.placed}`));
@@ -250,7 +259,7 @@ function render(i) {
     return c;
   }));
   $("cellsT").replaceChildren(table(["Seed", "Placed", "Attempts", "Shakes", "Ended"], bins.map(b => [b.seed, `${b.placed}/${b.parts}`, b.attempts, b.shakes, b.stop]), [0, 1, 2, 3]));
-  hist(run.cycles.rules, T.cycle, R.cycle_mean_s);
+  hist(run.cycles[lead], T.cycle, R.cycle_mean_s);
   fails(run);
   // side by side
   const P = Object.keys(run.planners), rows = [
@@ -292,6 +301,8 @@ function hist(cyc, target, mean) {
 }
 
 function fails(run) {
+  const rate = s => s.attempts ? 1 - s.successes / s.attempts : null, R = run.planners.rules, X = run.planners.random;
+  $("failsCap").textContent = "Each planner on its own scale." + (R && X && rate(R) ? ` Per attempt, random fails ${Math.round(rate(X) / rate(R))} times as often as rules.` : "");
   const P = Object.keys(run.planners), causes = [...new Set(P.flatMap(p => Object.keys(run.planners[p].failures)))];
   causes.sort((a, b) => (run.planners.rules.failures[b] || 0) - (run.planners.rules.failures[a] || 0) || (run.planners.random?.failures[b] || 0) - (run.planners.random?.failures[a] || 0));
   const W = 480, rowH = 26, lab = 170, H = 22 + rowH * causes.length + 6, colW = (W - lab) / P.length;

@@ -217,10 +217,11 @@ def bench_main(argv: list[str] | None = None) -> int:
     return 1 if errors else 0
 
 
+_DOCS = Path(__file__).resolve().parents[2] / "docs"
 DEFAULT_RUNS = [
-    ("docs/checkpoints/m6/seeds_1240-1264", "Final, unused seeds", "Final code on 25 seeds nobody had used: the blind test."),
-    ("docs/checkpoints/m6/seeds_1-25", "Final, seeds 1–25", "Final code on the benchmark seeds, after fixes made with milestone 5's results in hand: not blind."),
-    ("docs/checkpoints/m5", "First run, seeds 1–25", "Milestone 5: the first run of seeds 1-25, blind."),
+    (str(_DOCS / "checkpoints/m6/seeds_1240-1264"), "Final, unused seeds (blind)", "Final code on 25 seeds nobody had used: the blind test."),
+    (str(_DOCS / "checkpoints/m6/seeds_1-25"), "Final, seeds 1–25 (rerun)", "Final code on the benchmark seeds, after fixes made with milestone 5's results in hand: not blind."),
+    (str(_DOCS / "checkpoints/m5"), "First run, seeds 1–25 (blind)", "Milestone 5: the first run of seeds 1–25, blind."),
 ]
 
 
@@ -231,7 +232,7 @@ def dashboard_main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="binpick-dashboard", description="One HTML page showing benchmark runs.")
     ap.add_argument("--run", nargs=3, action="append", metavar=("FOLDER", "LABEL", "NOTE"),
                     help="a benchmark folder, its short label and a one-line note (repeat; default: the delivered runs)")
-    ap.add_argument("--out", default="docs/dashboard.html")
+    ap.add_argument("--out", default=str(_DOCS / "dashboard.html"))
     args = ap.parse_args(argv)
     print(f"wrote {write_dashboard([tuple(r) for r in (args.run or DEFAULT_RUNS)], args.out)}")
     return 0

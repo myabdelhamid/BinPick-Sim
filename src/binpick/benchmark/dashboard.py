@@ -24,7 +24,7 @@ def run_data(folder: str | Path, label: str, note: str) -> dict:
     meta = json.loads((folder / "meta.json").read_text())
     _, summary = make_report(folder)
     attempts, bins, parts = (_read(folder / f"{n}.csv") for n in ("attempts", "bins", "parts"))
-    seeds = meta["seeds"]
+    seeds, lead = meta["seeds"], "rules" if "rules" in meta["planners"] else meta["planners"][0]
     span = f"{seeds[0]}–{seeds[-1]}" if seeds == list(range(seeds[0], seeds[-1] + 1)) and len(seeds) > 1 else ", ".join(map(str, seeds))
     keep = ("attempts", "successes", "success_rate", "success_range", "bins", "emptied", "emptying_rate", "emptying_range", "parts",
             "placed", "cycle_mean_s", "cycle_median_s", "cycle_max_s", "over_8s", "sim_time_per_placed_s", "shakes", "failures",
@@ -40,14 +40,14 @@ def run_data(folder: str | Path, label: str, note: str) -> dict:
                    for p in meta["planners"]},
         "left": [{"planner": p["planner"], "seed": int(p["seed"]), "part": int(p["part"]), "shape": p["shape"], "dims": p["dims_mm"],
                   "kg": float(p["mass_kg"]), "state": p["state"], "grippable": p["grippable"], "tried": int(p["targeted"]) > 0}
-                 for p in parts if p["state"] != "placed" and p["planner"] == meta["planners"][0]],
+                 for p in parts if p["state"] != "placed" and p["planner"] == lead],
     }
 
 
 def write_dashboard(runs: list[tuple[str, str, str]], out: str | Path) -> Path:
     """runs: (folder, label, note). The first run is shown first."""
     data = {"targets": TARGETS, "runs": [run_data(*r) for r in runs]}
-    text = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+    text = json.dumps(data, separators=(",", ":")).replace("<", "\\u003c")  # nothing in the data can end the script
     page = PAGE.read_text().replace("/*DATA*/null", text).replace("{{TITLE}}", html.escape("BinPick-Sim results"))
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
